@@ -1,0 +1,38 @@
+backups:
+  # Database backups
+  - name: "mysql_data"
+    source_path: "./data/mysql"
+    storages: ["s3", "rsync"]
+
+  - name: "postgres_data"
+    source_path: "./data/postgres"
+    storages: ["google_drive", "s3"]
+
+  - name: "application_logs"
+    source_path: "/var/log/myapp"
+    storages: ["s3"]
+
+  - name: "documents"
+    source_path: "/home/user/documents"
+    storages: ["google_drive", "rsync"]
+
+storage:
+  s3:
+    enabled: true
+    bucket: "your-backup-bucket"
+    region: "us-west-2"
+    access_key: "your-access-key"
+    secret_key: "your-secret-key"
+    path: "backups/"
+
+  google_drive:
+    enabled: true
+    credentials_file: "credentials.json"
+    folder_id: "your-folder-id"
+
+  rsync:
+    enabled: true
+    target_server: "backup-server"
+    target_path: "/backup/data/"
+    user: "backup-user"
+    port: 22 
