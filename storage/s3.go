@@ -28,6 +28,20 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 		return nil, fmt.Errorf("s3 provider is disabled")
 	}
 
+	// Validate required fields
+	if cfg.Bucket == "" {
+		return nil, fmt.Errorf("s3 bucket is required")
+	}
+	if cfg.Region == "" {
+		return nil, fmt.Errorf("s3 region is required")
+	}
+	if cfg.AccessKeyID == "" {
+		return nil, fmt.Errorf("s3 access key ID is required")
+	}
+	if cfg.SecretAccessKey == "" {
+		return nil, fmt.Errorf("s3 secret access key is required")
+	}
+
 	// Create AWS configuration
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(cfg.Region),
@@ -43,6 +57,12 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 
 	// Create S3 client
 	client := s3.NewFromConfig(awsCfg)
+
+	// Validate credentials by trying to list buckets
+	_, err = client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate S3 credentials: %v", err)
+	}
 
 	return &S3Provider{
 		config: cfg,

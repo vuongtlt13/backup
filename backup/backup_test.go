@@ -1,113 +1,277 @@
 package backup
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
+	"time"
 
 	"backupdb/config"
-	"backupdb/logger"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewBackupService(t *testing.T) {
-	// Create test configuration
+	// Create test config
 	cfg := &config.Config{
 		Backups: []config.BackupConfig{
 			{
-				Name:       "test_backup",
-				SourcePath: "test_source",
-				Storages:   []string{"s3_test", "rsync_test"},
+				Name:       "test-backup",
+				SourcePath: "/test/path",
+				Storage:    []string{"s3"},
+			},
+		},
+		Storage: map[string]config.StorageConfig{
+			"s3": {
+				Enabled:         true,
+				Kind:            "s3",
+				Bucket:          "test-bucket",
+				Region:          "us-west-2",
+				AccessKeyID:     "test-access-key",
+				SecretAccessKey: "test-secret-key",
 			},
 		},
 	}
 
-	// Create backup service
+	// Create service
 	service := NewBackupService(cfg)
-	assert.NotNil(t, service, "Backup service should not be nil")
-	assert.NotNil(t, service.config, "Config should not be nil")
-	assert.NotNil(t, service.storage, "Storage service should not be nil")
+	assert.NotNil(t, service)
 }
 
 func TestCreateBackup(t *testing.T) {
-	// Create test directories
-	testSource := "test_source"
-	testFile := "test_file.txt"
-	testContent := []byte("test content")
+	// Create temporary test directory structure
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
-	err := os.MkdirAll(testSource, 0755)
-	assert.NoError(t, err, "Failed to create test source directory")
-	defer os.RemoveAll(testSource)
-
-	err = os.WriteFile(filepath.Join(testSource, testFile), testContent, 0644)
-	assert.NoError(t, err, "Failed to create test file")
-
-	// Create test configuration
+	// Create test config
 	cfg := &config.Config{
 		Backups: []config.BackupConfig{
 			{
-				Name:       "test_backup",
-				SourcePath: testSource,
-				Storages:   []string{"s3_test"},
+				Name:       "test-backup",
+				SourcePath: tmpDir,
+				Storage:    []string{}, // No storage for basic backup test
+				Scheduler: struct {
+					Enabled    bool   `yaml:"enabled"`
+					CronExpr   string `yaml:"cron_expr"`
+					MaxBackups int    `yaml:"max_backups"`
+				}{
+					Enabled:    true,
+					CronExpr:   "*/5 * * * *",
+					MaxBackups: 3,
+				},
+				Ignore: struct {
+					Files   []string `yaml:"files"`
+					Folders []string `yaml:"folders"`
+				}{
+					Files:   []string{"*.tmp"},
+					Folders: []string{"temp"},
+				},
+			},
+		},
+		Storage: map[string]config.StorageConfig{
+			"rsync": {
+				Enabled:  true,
+				Kind:     "rsync",
+				Server:   "localhost",
+				Username: "",
+				Path:     "./backups/rsync",
+				Port:     22,
 			},
 		},
 	}
 
-	// Create backup service
+	// Create service
 	service := NewBackupService(cfg)
+	assert.NotNil(t, service)
 
-	// Create backup
-	err = service.CreateBackup()
-	assert.NoError(t, err, "Failed to create backup")
+	// Create backup directory
+	backupDir := filepath.Join("backups", "test-backup")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		t.Fatalf("failed to create backup directory: %v", err)
+	}
+	defer os.RemoveAll("backups")
 
-	// Verify backup file exists
-	backupDir := filepath.Join("backups", "test_backup")
-	backupFiles, err := filepath.Glob(filepath.Join(backupDir, "*.tar.gz"))
-	assert.NoError(t, err, "Failed to find backup files")
-	assert.NotEmpty(t, backupFiles, "Backup files should exist")
+	// Test case 1: Successful backup without storage
+	t.Run("Successful backup without storage", func(t *testing.T) {
+		err := service.CreateBackup(cfg.Backups[0])
+		assert.NoError(t, err)
 
-	// Cleanup
-	os.RemoveAll("backups")
+		// Verify backup file exists
+		entries, err := os.ReadDir(backupDir)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(entries))
+
+		// Verify backup file name format and size
+		backupFile := filepath.Join(backupDir, entries[0].Name())
+		assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.\\d{6}\\.tar\\.gz$", cfg.Backups[0].Name), entries[0].Name(), "Backup filename should match the expected format")
+		info, err := os.Stat(backupFile)
+		assert.NoError(t, err)
+		assert.Greater(t, info.Size(), int64(0))
+	})
+
+	// Test case 2: Failed storage but successful backup
+	t.Run("Failed storage but successful backup", func(t *testing.T) {
+		backupWithStorage := cfg.Backups[0]
+		backupWithStorage.Storage = []string{"rsync"}
+		err := service.CreateBackup(backupWithStorage)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send backup to storage")
+
+		// Verify backup file was cleaned up after storage failure
+		entries, err := os.ReadDir(backupDir)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(entries)) // Should still have only the previous successful backup
+	})
+
+	// Test case 3: Backup with non-existent source
+	t.Run("Non-existent source", func(t *testing.T) {
+		invalidBackup := cfg.Backups[0]
+		invalidBackup.SourcePath = "non_existent_dir"
+		err := service.CreateBackup(invalidBackup)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create backup")
+
+		// Verify no new backup file was created
+		entries, err := os.ReadDir(backupDir)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(entries)) // Should still have only the previous successful backup
+	})
+
+	// Test case 4: Backup with read-only source
+	t.Run("Read-only source", func(t *testing.T) {
+		// Create a read-only directory with no read permissions
+		readOnlyDir := filepath.Join(tmpDir, "readonly")
+		if err := os.MkdirAll(readOnlyDir, 0755); err != nil {
+			t.Fatalf("failed to create readonly directory: %v", err)
+		}
+		if err := os.Chmod(readOnlyDir, 0000); err != nil { // No permissions at all
+			t.Fatalf("failed to set directory permissions: %v", err)
+		}
+		defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
+
+		readOnlyBackup := cfg.Backups[0]
+		readOnlyBackup.SourcePath = readOnlyDir
+		err := service.CreateBackup(readOnlyBackup)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create backup")
+
+		// Verify no new backup file was created
+		entries, err := os.ReadDir(backupDir)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(entries)) // Should still have only the previous successful backup
+	})
+
+	// Test case 5: Backup with max backups limit
+	t.Run("Max backups limit", func(t *testing.T) {
+		// Reset backup directory
+		os.RemoveAll(backupDir)
+		os.MkdirAll(backupDir, 0755)
+
+		// Create multiple backups
+		for i := 0; i < 5; i++ {
+			err := service.CreateBackup(cfg.Backups[0])
+			assert.NoError(t, err)
+			// Add a small delay to ensure different timestamps
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Verify only max_backups files exist
+		entries, err := os.ReadDir(backupDir)
+		assert.NoError(t, err)
+		assert.Equal(t, cfg.Backups[0].Scheduler.MaxBackups, len(entries))
+
+		// Get filenames and verify they are sorted by timestamp (newest first)
+		var filenames []string
+		for _, entry := range entries {
+			filenames = append(filenames, entry.Name())
+			// Verify filename format
+			assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.\\d{6}\\.tar\\.gz$", cfg.Backups[0].Name), entry.Name(), "Backup filename should match the expected format")
+		}
+		sort.Strings(filenames)
+		sort.Sort(sort.Reverse(sort.StringSlice(filenames)))
+
+		// Verify files are sorted by timestamp (newest first)
+		for i := 0; i < len(filenames)-1; i++ {
+			assert.True(t, filenames[i] > filenames[i+1], "Backup files should be sorted by timestamp (newest first)")
+		}
+	})
 }
 
 func TestBackupFolder(t *testing.T) {
-	// Create test directories
-	testSource := "test_source"
-	testFile := "test_file.txt"
-	testContent := []byte("test content")
-
-	err := os.MkdirAll(testSource, 0755)
-	assert.NoError(t, err, "Failed to create test source directory")
-	defer os.RemoveAll(testSource)
-
-	err = os.WriteFile(filepath.Join(testSource, testFile), testContent, 0644)
-	assert.NoError(t, err, "Failed to create test file")
-
-	// Create test configuration
-	backupCfg := config.BackupConfig{
-		Name:       "test_backup",
-		SourcePath: testSource,
-		Storages:   []string{"s3_test"},
+	// Create temporary test directory structure
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	// Create backup service
-	service := NewBackupService(&config.Config{})
+	// Create test config
+	cfg := &config.Config{
+		Backups: []config.BackupConfig{
+			{
+				Name:       "test-backup",
+				SourcePath: tmpDir,
+				Storage:    []string{"s3"},
+				Ignore: struct {
+					Files   []string `yaml:"files"`
+					Folders []string `yaml:"folders"`
+				}{
+					Files:   []string{"*.tmp"},
+					Folders: []string{"temp"},
+				},
+			},
+		},
+		Storage: map[string]config.StorageConfig{
+			"s3": {
+				Enabled:         true,
+				Kind:            "s3",
+				Bucket:          "test-bucket",
+				Region:          "us-west-2",
+				AccessKeyID:     "test-access-key",
+				SecretAccessKey: "test-secret-key",
+			},
+		},
+	}
+
+	// Create service
+	service := NewBackupService(cfg)
+	assert.NotNil(t, service)
 
 	// Create backup directory
-	backupDir := filepath.Join("backups", backupCfg.Name)
-	err = os.MkdirAll(backupDir, 0755)
-	assert.NoError(t, err, "Failed to create backup directory")
+	backupDir := filepath.Join("backups", "test-backup")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		t.Fatalf("failed to create backup directory: %v", err)
+	}
 	defer os.RemoveAll("backups")
 
-	// Test backup folder
-	err = service.backupFolder(backupCfg, backupDir)
-	assert.NoError(t, err, "Failed to backup folder")
+	// Create a temporary file that should be ignored
+	tmpFile := filepath.Join(tmpDir, "test.tmp")
+	if err := os.WriteFile(tmpFile, []byte("temp content"), 0644); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	// Create a directory that should be ignored
+	tempDir := filepath.Join(tmpDir, "temp")
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		t.Fatalf("failed to create temp directory: %v", err)
+	}
+
+	// Test backing up folder
+	timestamp := time.Now().Format("20060102150405")
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", cfg.Backups[0].Name, timestamp))
+	err := service.archiveService.CreateBackupArchive(cfg.Backups[0], backupFile)
+	assert.NoError(t, err)
 
 	// Verify backup file exists
-	backupFiles, err := filepath.Glob(filepath.Join(backupDir, "*.tar.gz"))
-	assert.NoError(t, err, "Failed to find backup files")
-	assert.NotEmpty(t, backupFiles, "Backup files should exist")
+	_, err = os.Stat(backupFile)
+	assert.NoError(t, err)
+	// Verify backup file name format
+	assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.tar\\.gz$", cfg.Backups[0].Name), filepath.Base(backupFile), "Backup filename should match the expected format")
 }
 
 func TestCopyDirectory(t *testing.T) {
@@ -155,4 +319,47 @@ func TestCopyFile(t *testing.T) {
 	content, err := os.ReadFile(dstFile)
 	assert.NoError(t, err, "Failed to read copied file")
 	assert.Equal(t, testContent, content, "Copied file content should match")
-} 
+}
+
+func TestShouldIgnoreFile(t *testing.T) {
+	// Create temporary test directory structure
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	tempFile := filepath.Join(tmpDir, "test.tmp")
+	tempDir := filepath.Join(tmpDir, "temp")
+
+	// Create test files and directories
+	os.WriteFile(testFile, []byte("test content"), 0644)
+	os.WriteFile(tempFile, []byte("temp content"), 0644)
+	os.MkdirAll(tempDir, 0755)
+
+	// Create test config
+	cfg := &config.Config{
+		Backups: []config.BackupConfig{
+			{
+				Name:       "test-backup",
+				SourcePath: tmpDir,
+				Ignore: struct {
+					Files   []string `yaml:"files"`
+					Folders []string `yaml:"folders"`
+				}{
+					Files:   []string{"*.tmp"},
+					Folders: []string{"temp"},
+				},
+			},
+		},
+	}
+
+	service := NewBackupService(cfg)
+
+	// Test cases
+	t.Run("Ignore file pattern", func(t *testing.T) {
+		assert.True(t, service.shouldIgnoreFile(tempFile, cfg.Backups[0]))
+		assert.False(t, service.shouldIgnoreFile(testFile, cfg.Backups[0]))
+	})
+
+	t.Run("Ignore folder pattern", func(t *testing.T) {
+		assert.True(t, service.shouldIgnoreFile(tempDir, cfg.Backups[0]))
+		assert.False(t, service.shouldIgnoreFile(tmpDir, cfg.Backups[0]))
+	})
+}

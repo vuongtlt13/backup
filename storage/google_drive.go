@@ -31,6 +31,14 @@ func NewGoogleDriveProvider(cfg config.StorageConfig) (*GoogleDriveProvider, err
 		return nil, fmt.Errorf("google drive provider is disabled")
 	}
 
+	// Validate required fields
+	if cfg.CredentialsFile == "" {
+		return nil, fmt.Errorf("google drive credentials file is required")
+	}
+	if cfg.FolderID == "" {
+		return nil, fmt.Errorf("google drive folder ID is required")
+	}
+
 	ctx := context.Background()
 	credentials, err := os.ReadFile(cfg.CredentialsFile)
 	if err != nil {
@@ -45,6 +53,12 @@ func NewGoogleDriveProvider(cfg config.StorageConfig) (*GoogleDriveProvider, err
 	service, err := drive.NewService(ctx, option.WithHTTPClient(config.Client(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create drive service: %v", err)
+	}
+
+	// Validate credentials by trying to get folder info
+	_, err = service.Files.Get(cfg.FolderID).Fields("id, name").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate Google Drive credentials: %v", err)
 	}
 
 	return &GoogleDriveProvider{

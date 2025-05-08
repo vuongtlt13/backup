@@ -4,65 +4,51 @@ import (
 	"testing"
 
 	"backupdb/config"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestRsyncProvider(t *testing.T) {
-	// Create test config
+func TestNewRsyncProvider(t *testing.T) {
+	// Test with valid config
 	cfg := config.StorageConfig{
-		Kind:         "rsync",
-		Enabled:      true,
-		TargetServer: "test-server",
-		TargetPath:   "/backup/",
-		User:         "test-user",
-		Port:         22,
+		Enabled:  true,
+		Kind:     "rsync",
+		Server:   "test-server",
+		Username: "test-user",
+		Path:     "/backup",
 	}
 
-	// Create provider
-	provider := NewRsyncProvider("test_rsync", cfg)
-	if provider == nil {
-		t.Fatal("failed to create Rsync provider")
-	}
+	provider, err := NewRsyncProvider(cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, provider)
+	assert.Equal(t, "rsync", provider.GetName())
 
-	// Test provider name
-	if name := provider.Name(); name != "test_rsync" {
-		t.Errorf("expected provider name 'test_rsync', got '%s'", name)
-	}
-
-	// Test with invalid config
-	invalidCfg := config.StorageConfig{
+	// Test with disabled config
+	disabledCfg := config.StorageConfig{
+		Enabled: false,
 		Kind:    "rsync",
-		Enabled: true,
-		// Missing required fields
 	}
 
-	provider = NewRsyncProvider("invalid_rsync", invalidCfg)
-	if provider != nil {
-		t.Error("expected nil provider with invalid config")
-	}
+	provider, err = NewRsyncProvider(disabledCfg)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
 }
 
-func TestRsyncProviderSend(t *testing.T) {
+func TestRsyncProviderSendFile(t *testing.T) {
 	// Create test config
 	cfg := config.StorageConfig{
-		Kind:         "rsync",
-		Enabled:      true,
-		TargetServer: "test-server",
-		TargetPath:   "/backup/",
-		User:         "test-user",
-		Port:         22,
+		Enabled:  true,
+		Kind:     "rsync",
+		Server:   "test-server",
+		Username: "test-user",
+		Path:     "/backup",
 	}
 
-	// Create provider
-	provider := NewRsyncProvider("test_rsync", cfg)
-	if provider == nil {
-		t.Fatal("failed to create Rsync provider")
-	}
+	provider, err := NewRsyncProvider(cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, provider)
 
-	// Test sending file
-	// Note: This is a mock test since we don't want to actually send via rsync
-	// In a real test, you would use a mock rsync command
-	err := provider.Send("test.txt")
-	if err == nil {
-		t.Error("expected error when sending via rsync without proper connection")
-	}
-} 
+	// Test sending non-existent file
+	err = provider.SendFile("non-existent.txt")
+	assert.Error(t, err)
+}
