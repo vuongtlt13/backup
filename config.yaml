@@ -2,37 +2,46 @@ backups:
   # Database backups
   - name: "mysql_data"
     source_path: "./data/mysql"
-    storages: ["s3", "rsync"]
+    storage: ["s3", "rsync"]
+    scheduler:
+      enabled: true
+      cron_expr: "0 * * * *"  # Run at 2 AM daily
+      max_backups: 7
+    ignore:
+      files: ["*.log", "*.tmp", "mysql.sock"]
+      folders: ["temp", "cache"]
 
   - name: "postgres_data"
     source_path: "./data/postgres"
-    storages: ["google_drive", "s3"]
-
-  - name: "application_logs"
-    source_path: "/var/log/myapp"
-    storages: ["s3"]
-
-  - name: "documents"
-    source_path: "/home/user/documents"
-    storages: ["google_drive", "rsync"]
+    storage: ["google_drive", "s3"]
+    scheduler:
+      enabled: true
+      cron_expr: "0 * * * *"  # Run at 3 AM on Monday, Wednesday, and Friday
+      max_backups: 7
+    ignore:
+      files: ["*.log", "*.tmp", "postmaster.pid"]
+      folders: ["pg_wal", "pg_stat"]
 
 storage:
   s3:
+    kind: "s3"
     enabled: true
     bucket: "your-backup-bucket"
     region: "us-west-2"
-    access_key: "your-access-key"
-    secret_key: "your-secret-key"
+    access_key_id: "your-access-key"
+    secret_access_key: "your-secret-key"
     path: "backups/"
 
   google_drive:
+    kind: "google_drive"
     enabled: true
     credentials_file: "credentials.json"
     folder_id: "your-folder-id"
 
   rsync:
+    kind: "rsync"
     enabled: true
-    target_server: "backup-server"
-    target_path: "/backup/data/"
-    user: "backup-user"
+    server: "backup-server"
+    username: "backup-user"
+    path: "/backup/data/"
     port: 22 

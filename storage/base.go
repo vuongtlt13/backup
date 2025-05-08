@@ -5,121 +5,111 @@ import (
 	"os"
 
 	"backupdb/config"
-	"go.uber.org/zap"
+	"backupdb/logger"
 )
 
 // StorageProvider defines the interface for all storage implementations
 type StorageProvider interface {
-	// SendBackup sends a backup file to the storage destination
-	SendBackup(filePath string) error
-	// Name returns the name of the storage provider
-	Name() string
+	// SendFile sends a file to the storage destination
+	SendFile(filePath string) error
+	// GetName returns the name of the storage provider
+	GetName() string
 }
 
 // StorageService manages multiple storage providers
 type StorageService struct {
 	providers map[string]StorageProvider
-	logger    *zap.Logger
+	log       *logger.Logger
 }
 
 // NewStorageService creates a new storage service with configured providers
 func NewStorageService(cfg *config.Config) *StorageService {
 	service := &StorageService{
 		providers: make(map[string]StorageProvider),
-		logger:    zap.L(),
+		log:       logger.Get(),
 	}
 
 	// Initialize providers
 	for name, storageCfg := range cfg.Storage {
 		if !storageCfg.Enabled {
-			service.logger.Info("Storage provider disabled",
-				zap.String("provider", name),
-				zap.String("kind", storageCfg.Kind),
-			)
+			service.log.Info("Storage", "[Storage] => Storage | %s (disabled)", name)
 			continue
 		}
 
 		var provider StorageProvider
+		var err error
+
 		switch storageCfg.Kind {
 		case "s3":
-			provider = NewS3Provider(name, storageCfg)
+			service.log.Info("Storage", "[Storage] => Storage | s3")
+			provider, err = NewS3Provider(storageCfg)
 		case "rsync":
-			provider = NewRsyncProvider(name, storageCfg)
+			service.log.Info("Storage", "[Storage] => Storage | rsync")
+			provider, err = NewRsyncProvider(storageCfg)
 		case "google_drive":
-			provider = NewGoogleDriveProvider(name, storageCfg)
+			service.log.Info("Storage", "[Storage] => Storage | google_drive")
+			provider, err = NewGoogleDriveProvider(storageCfg)
 		default:
-			service.logger.Error("Unknown storage provider kind",
-				zap.String("provider", name),
-				zap.String("kind", storageCfg.Kind),
-			)
+			service.log.Error("Storage", "Unknown storage provider kind: %s", storageCfg.Kind)
+			continue
+		}
+
+		if err != nil {
+			service.log.Error("Storage", "Failed to initialize storage provider %s: %v", name, err)
 			continue
 		}
 
 		if provider == nil {
-			service.logger.Error("Failed to initialize storage provider",
-				zap.String("provider", name),
-				zap.String("kind", storageCfg.Kind),
-			)
+			service.log.Error("Storage", "Failed to initialize storage provider %s (nil)", name)
 			continue
 		}
 
 		service.providers[name] = provider
-		service.logger.Info("Storage provider initialized",
-			zap.String("provider", name),
-			zap.String("kind", storageCfg.Kind),
-		)
+		service.log.Info("Storage", "[Storage] provider initialized: %s", name)
 	}
 
 	return service
 }
 
 // SendToStorage sends a backup file to all specified storage providers
-func (s *StorageService) SendToStorage(filePath string, storageNames []string) error {
-	s.logger.Info("Sending file to storage",
-		zap.String("file", filePath),
-		zap.Strings("storages", storageNames),
-	)
+func (s *StorageService) SendToStorage(filePath string, storageNames []string, backupName string) error {
+	s.log.Info("Storage", "[%s] Sending file to storage: %s", backupName, filePath)
 
 	// Verify file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("backup file does not exist: %s", filePath)
 	}
 
+	// Track if any storage provider succeeded
+	anySuccess := false
+	var lastError error
+
 	// Send to each specified storage provider
 	for _, name := range storageNames {
 		provider, err := s.GetProvider(name)
 		if err != nil {
-			s.logger.Error("Failed to get storage provider",
-				zap.String("provider", name),
-				zap.Error(err),
-			)
-			return err
+			s.log.Error("Storage", "[%s] Failed to get storage provider: %s", backupName, name)
+			lastError = err
+			continue
 		}
 
-		s.logger.Info("Sending file to provider",
-			zap.String("file", filePath),
-			zap.String("provider", name),
-		)
+		s.log.Info("Storage", "[%s] -> Sending file to provider: %s", backupName, name)
 
-		if err := provider.SendBackup(filePath); err != nil {
-			s.logger.Error("Failed to send file to provider",
-				zap.String("file", filePath),
-				zap.String("provider", name),
-				zap.Error(err),
-			)
-			return fmt.Errorf("failed to send to %s: %v", name, err)
+		if err := provider.SendFile(filePath); err != nil {
+			s.log.Error("Storage", "[%s] Failed to send file to provider %s: %v", backupName, name, err)
+			lastError = err
+			continue
 		}
 
-		s.logger.Info("File sent successfully to provider",
-			zap.String("file", filePath),
-			zap.String("provider", name),
-		)
+		s.log.Info("Storage", "[%s] File sent successfully to provider: %s", backupName, name)
+		anySuccess = true
 	}
 
-	s.logger.Info("File sent successfully to all providers",
-		zap.String("file", filePath),
-		zap.Strings("storages", storageNames),
-	)
+	if !anySuccess {
+		return fmt.Errorf("failed to send file to any storage provider: %v", lastError)
+	}
+
+	s.log.Info("Storage", "[%s] File sent successfully to at least one provider: %s", backupName, filePath)
 	return nil
 }
 
@@ -127,9 +117,7 @@ func (s *StorageService) SendToStorage(filePath string, storageNames []string) e
 func (s *StorageService) GetProvider(name string) (StorageProvider, error) {
 	provider, exists := s.providers[name]
 	if !exists {
-		s.logger.Error("Storage provider not found",
-			zap.String("provider", name),
-		)
+		s.log.Error("Storage", "Storage provider not found: %s", name)
 		return nil, fmt.Errorf("storage provider %s not found", name)
 	}
 	return provider, nil

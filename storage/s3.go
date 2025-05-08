@@ -6,119 +6,103 @@ import (
 	"os"
 	"path/filepath"
 
-	"backupdb/config"
-	"backupdb/logger"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
-	s3config "github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"go.uber.org/zap"
+
+	"backupdb/config"
+	"backupdb/logger"
 )
 
 // S3Provider implements StorageProvider for AWS S3
 type S3Provider struct {
-	name   string
 	config config.StorageConfig
 	client *s3.Client
+	log    *logger.Logger
 }
 
 // NewS3Provider creates a new S3 storage provider
-func NewS3Provider(name string, cfg config.StorageConfig) *S3Provider {
-	log := logger.Get().With(
-		zap.String("provider", name),
-		zap.String("kind", "s3"),
-	)
+func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("s3 provider is disabled")
+	}
 
-	// Create AWS config
-	awsCfg, err := s3config.LoadDefaultConfig(context.Background(),
-		s3config.WithRegion(cfg.Region),
-		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			cfg.AccessKey,
-			cfg.SecretKey,
+	// Create AWS configuration
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithRegion(cfg.Region),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			cfg.AccessKeyID,
+			cfg.SecretAccessKey,
 			"",
 		)),
 	)
 	if err != nil {
-		log.Error("Failed to create AWS config",
-			zap.Error(err),
-		)
-		return nil
+		return nil, fmt.Errorf("failed to load AWS config: %v", err)
 	}
 
 	// Create S3 client
 	client := s3.NewFromConfig(awsCfg)
 
 	return &S3Provider{
-		name:   name,
 		config: cfg,
 		client: client,
-	}
+		log:    logger.Get(),
+	}, nil
 }
 
-// SendBackup implements StorageProvider interface
-func (p *S3Provider) SendBackup(filePath string) error {
-	log := logger.Get().With(
-		zap.String("provider", p.name),
-		zap.String("kind", "s3"),
-	)
-
-	log.Info("Starting S3 upload",
-		zap.String("file", filePath),
-		zap.String("bucket", p.config.Bucket),
-		zap.String("path", p.config.Path),
+// SendFile implements StorageProvider interface
+func (p *S3Provider) SendFile(filePath string) error {
+	p.log.Info("Sending file to S3",
+		"file", filePath,
+		"bucket", p.config.Bucket,
 	)
 
 	// Open file
-	fileContent, err := os.Open(filePath)
+	file, err := os.Open(filePath)
 	if err != nil {
-		log.Error("Failed to open file",
-			zap.String("file", filePath),
-			zap.Error(err),
+		p.log.Error("Failed to open file",
+			"file", filePath,
+			"error", err,
 		)
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-	defer fileContent.Close()
+	defer file.Close()
 
 	// Get file info
-	fileInfo, err := fileContent.Stat()
+	fileInfo, err := file.Stat()
 	if err != nil {
-		log.Error("Failed to get file info",
-			zap.String("file", filePath),
-			zap.Error(err),
+		p.log.Error("Failed to get file info",
+			"file", filePath,
+			"error", err,
 		)
 		return fmt.Errorf("failed to get file info: %v", err)
 	}
 
-	// Create S3 key
-	key := filepath.Join(p.config.Path, filepath.Base(filePath))
-
-	// Upload file
+	// Upload file to S3
 	_, err = p.client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:        aws.String(p.config.Bucket),
-		Key:           aws.String(key),
-		Body:          fileContent,
+		Key:           aws.String(filepath.Base(filePath)),
+		Body:          file,
 		ContentLength: aws.Int64(fileInfo.Size()),
 	})
 	if err != nil {
-		log.Error("Failed to upload file to S3",
-			zap.String("file", filePath),
-			zap.String("bucket", p.config.Bucket),
-			zap.String("key", key),
-			zap.Error(err),
+		p.log.Error("Failed to upload file to S3",
+			"file", filePath,
+			"bucket", p.config.Bucket,
+			"error", err,
 		)
-		return fmt.Errorf("failed to upload to S3: %v", err)
+		return fmt.Errorf("failed to upload file to S3: %v", err)
 	}
 
-	log.Info("File uploaded successfully to S3",
-		zap.String("file", filePath),
-		zap.String("bucket", p.config.Bucket),
-		zap.String("key", key),
+	p.log.Info("File sent successfully to S3",
+		"file", filePath,
+		"bucket", p.config.Bucket,
 	)
 	return nil
 }
 
-// Name implements StorageProvider interface
-func (p *S3Provider) Name() string {
-	return p.name
+// GetName implements StorageProvider interface
+func (p *S3Provider) GetName() string {
+	return "s3"
 }
