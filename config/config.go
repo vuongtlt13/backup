@@ -9,8 +9,8 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Backups []BackupConfig            `yaml:"backups"`
-	Storage map[string]StorageConfig  `yaml:"storage"`
+	Backups []BackupConfig           `yaml:"backups"`
+	Storage map[string]StorageConfig `yaml:"storage"`
 }
 
 // BackupConfig represents a single backup configuration
@@ -26,14 +26,14 @@ type BackupConfig struct {
 	} `yaml:"scheduler"`
 	// Ignore patterns for files and folders
 	Ignore struct {
-		Files   []string `yaml:"files"`    // e.g. ["*.log", "*.tmp", "temp.txt"]
-		Folders []string `yaml:"folders"`   // e.g. ["node_modules", ".git", "temp"]
+		Files   []string `yaml:"files"`   // e.g. ["*.log", "*.tmp", "temp.txt"]
+		Folders []string `yaml:"folders"` // e.g. ["node_modules", ".git", "temp"]
 	} `yaml:"ignore"`
 }
 
 // StorageConfig represents storage configuration
 type StorageConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool   `yaml:"enabled"`
 	Kind    string `yaml:"kind"` // s3, rsync, google_drive
 
 	// S3 specific fields
@@ -50,6 +50,7 @@ type StorageConfig struct {
 	Server   string `yaml:"server"`
 	Username string `yaml:"username"`
 	Path     string `yaml:"path"`
+	Port     int    `yaml:"port"`
 }
 
 // LoadConfig loads the configuration from a file
@@ -65,4 +66,4 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &config, nil
-} 
+}

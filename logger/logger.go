@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,5 +52,15 @@ func logPrint(level, tag, msg string, args ...interface{}) {
 	if len(args) > 0 {
 		msg = fmt.Sprintf(msg, args...)
 	}
-	fmt.Fprintf(os.Stdout, "%s %s %s %s\n", timestamp, tag, level, msg)
+	// Extract backup name from message if it exists
+	backupName := ""
+	if strings.Contains(msg, "[") && strings.Contains(msg, "]") {
+		start := strings.Index(msg, "[")
+		end := strings.Index(msg, "]")
+		if start != -1 && end != -1 && end > start {
+			backupName = msg[start : end+1]
+			msg = msg[end+1:]
+		}
+	}
+	fmt.Fprintf(os.Stdout, "%s %s %s %s %s\n", timestamp, tag, backupName, level, msg)
 }

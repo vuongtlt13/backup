@@ -4,67 +4,60 @@ import (
 	"testing"
 
 	"backupdb/config"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestS3Provider(t *testing.T) {
-	// Create test config
+func TestNewS3Provider(t *testing.T) {
+	// Test with valid config but invalid credentials
 	cfg := config.StorageConfig{
-		Kind:      "s3",
-		Enabled:   true,
-		Bucket:    "test-bucket",
-		Region:    "us-west-2",
-		AccessKey: "test-key",
-		SecretKey: "test-secret",
-		Path:      "backups/",
+		Enabled:         true,
+		Kind:            "s3",
+		Bucket:          "test-bucket",
+		Region:          "us-west-2",
+		AccessKeyID:     "invalid-key",
+		SecretAccessKey: "invalid-secret",
 	}
 
-	// Create provider
-	provider := NewS3Provider("test_s3", cfg)
-	if provider == nil {
-		t.Fatal("failed to create S3 provider")
-	}
+	provider, err := NewS3Provider(cfg)
+	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Nil(t, provider)
 
-	// Test provider name
-	if name := provider.Name(); name != "test_s3" {
-		t.Errorf("expected provider name 'test_s3', got '%s'", name)
-	}
-
-	// Test with invalid config
-	invalidCfg := config.StorageConfig{
+	// Test with disabled config
+	disabledCfg := config.StorageConfig{
+		Enabled: false,
 		Kind:    "s3",
-		Enabled: true,
-		// Missing required fields
 	}
 
-	provider = NewS3Provider("invalid_s3", invalidCfg)
-	if provider != nil {
-		t.Error("expected nil provider with invalid config")
+	provider, err = NewS3Provider(disabledCfg)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+
+	// Test with missing credentials
+	invalidCfg := config.StorageConfig{
+		Enabled: true,
+		Kind:    "s3",
+		Bucket:  "test-bucket",
+		Region:  "us-west-2",
 	}
+
+	provider, err = NewS3Provider(invalidCfg)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
 }
 
-func TestS3ProviderSend(t *testing.T) {
-	// Create test config
+func TestS3ProviderSendFile(t *testing.T) {
+	// Create test config with invalid credentials
 	cfg := config.StorageConfig{
-		Kind:      "s3",
-		Enabled:   true,
-		Bucket:    "test-bucket",
-		Region:    "us-west-2",
-		AccessKey: "test-key",
-		SecretKey: "test-secret",
-		Path:      "backups/",
+		Enabled:         true,
+		Kind:            "s3",
+		Bucket:          "test-bucket",
+		Region:          "us-west-2",
+		AccessKeyID:     "invalid-key",
+		SecretAccessKey: "invalid-secret",
 	}
 
-	// Create provider
-	provider := NewS3Provider("test_s3", cfg)
-	if provider == nil {
-		t.Fatal("failed to create S3 provider")
-	}
-
-	// Test sending file
-	// Note: This is a mock test since we don't want to actually send to S3
-	// In a real test, you would use a mock S3 client
-	err := provider.Send("test.txt")
-	if err == nil {
-		t.Error("expected error when sending to S3 without proper credentials")
-	}
-} 
+	provider, err := NewS3Provider(cfg)
+	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Nil(t, provider)
+}

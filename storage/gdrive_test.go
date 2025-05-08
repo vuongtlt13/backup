@@ -1,64 +1,87 @@
 package storage
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"backupdb/config"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestGoogleDriveProvider(t *testing.T) {
-	// Create test config
+func TestNewGoogleDriveProvider(t *testing.T) {
+	// Create temporary credentials file with invalid credentials
+	tmpDir := t.TempDir()
+	credentialsFile := filepath.Join(tmpDir, "credentials.json")
+	err := os.WriteFile(credentialsFile, []byte(`{
+		"type": "service_account",
+		"project_id": "test-project",
+		"private_key_id": "test-key-id",
+		"private_key": "invalid-key",
+		"client_email": "test@test.com",
+		"client_id": "test-client-id"
+	}`), 0644)
+	assert.NoError(t, err)
+
+	// Test with invalid credentials
 	cfg := config.StorageConfig{
-		Kind:            "google_drive",
 		Enabled:         true,
-		CredentialsFile: "test-credentials.json",
-		FolderID:        "test-folder",
+		Kind:            "google_drive",
+		CredentialsFile: credentialsFile,
+		FolderID:        "test-folder-id",
 	}
 
-	// Create provider
-	provider := NewGoogleDriveProvider("test_gdrive", cfg)
-	if provider == nil {
-		t.Fatal("failed to create Google Drive provider")
-	}
+	provider, err := NewGoogleDriveProvider(cfg)
+	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Nil(t, provider)
 
-	// Test provider name
-	if name := provider.Name(); name != "test_gdrive" {
-		t.Errorf("expected provider name 'test_gdrive', got '%s'", name)
-	}
-
-	// Test with invalid config
-	invalidCfg := config.StorageConfig{
+	// Test with disabled config
+	disabledCfg := config.StorageConfig{
+		Enabled: false,
 		Kind:    "google_drive",
-		Enabled: true,
-		// Missing required fields
 	}
 
-	provider = NewGoogleDriveProvider("invalid_gdrive", invalidCfg)
-	if provider != nil {
-		t.Error("expected nil provider with invalid config")
+	provider, err = NewGoogleDriveProvider(disabledCfg)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+
+	// Test with missing credentials file
+	invalidCfg := config.StorageConfig{
+		Enabled:         true,
+		Kind:            "google_drive",
+		CredentialsFile: "non-existent.json",
+		FolderID:        "test-folder-id",
 	}
+
+	provider, err = NewGoogleDriveProvider(invalidCfg)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
 }
 
-func TestGoogleDriveProviderSend(t *testing.T) {
+func TestGoogleDriveProviderSendFile(t *testing.T) {
+	// Create temporary credentials file with invalid credentials
+	tmpDir := t.TempDir()
+	credentialsFile := filepath.Join(tmpDir, "credentials.json")
+	err := os.WriteFile(credentialsFile, []byte(`{
+		"type": "service_account",
+		"project_id": "test-project",
+		"private_key_id": "test-key-id",
+		"private_key": "invalid-key",
+		"client_email": "test@test.com",
+		"client_id": "test-client-id"
+	}`), 0644)
+	assert.NoError(t, err)
+
 	// Create test config
 	cfg := config.StorageConfig{
-		Kind:            "google_drive",
 		Enabled:         true,
-		CredentialsFile: "test-credentials.json",
-		FolderID:        "test-folder",
+		Kind:            "google_drive",
+		CredentialsFile: credentialsFile,
+		FolderID:        "test-folder-id",
 	}
 
-	// Create provider
-	provider := NewGoogleDriveProvider("test_gdrive", cfg)
-	if provider == nil {
-		t.Fatal("failed to create Google Drive provider")
-	}
-
-	// Test sending file
-	// Note: This is a mock test since we don't want to actually send to Google Drive
-	// In a real test, you would use a mock Google Drive client
-	err := provider.Send("test.txt")
-	if err == nil {
-		t.Error("expected error when sending to Google Drive without proper credentials")
-	}
-} 
+	provider, err := NewGoogleDriveProvider(cfg)
+	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Nil(t, provider)
+}

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
 func TestLoggerSingleton(t *testing.T) {
@@ -22,20 +21,18 @@ func TestLoggerConfiguration(t *testing.T) {
 	// Verify logger is not nil
 	assert.NotNil(t, logger, "Logger should not be nil")
 
-	// Verify logger is a zap logger
-	_, ok := logger.(*zap.Logger)
-	assert.True(t, ok, "Logger should be a zap.Logger")
+	// Verify logger is of correct type
+	_, ok := interface{}(logger).(*Logger)
+	assert.True(t, ok, "Logger should be of type *Logger")
 }
 
 func TestLoggerFields(t *testing.T) {
 	logger := Get()
 
 	// Test logging with fields
-	logger.Info("Test message",
-		"string_field", "value",
-		"int_field", 42,
-		"bool_field", true,
-	)
+	logger.Info("test", "Test message with %s", "fields")
+	logger.Error("test", "Test error with %s", "fields")
+	logger.Warn("Test warning with %s", "fields")
 
 	// No assertions needed as we're just testing that logging doesn't panic
 }

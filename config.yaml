@@ -5,7 +5,7 @@ backups:
     storage: ["s3", "rsync"]
     scheduler:
       enabled: true
-      cron_expr: "0 * * * *"  # Run at 2 AM daily
+      cron_expr: "* * * * *"  # Run at 2 AM daily
       max_backups: 7
     ignore:
       files: ["*.log", "*.tmp", "mysql.sock"]
@@ -16,7 +16,7 @@ backups:
     storage: ["google_drive", "s3"]
     scheduler:
       enabled: true
-      cron_expr: "0 * * * *"  # Run at 3 AM on Monday, Wednesday, and Friday
+      cron_expr: "* * * * *"  # Run at 3 AM on Monday, Wednesday, and Friday
       max_backups: 7
     ignore:
       files: ["*.log", "*.tmp", "postmaster.pid"]

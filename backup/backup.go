@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -82,10 +83,10 @@ func (s *BackupService) cleanupOldBackups(backup config.BackupConfig) error {
 		return fmt.Errorf("failed to read backup directory: %v", err)
 	}
 
-	// Sort backups by modification time (newest first)
+	// Sort backups by timestamp in filename (newest first)
 	type backupInfo struct {
-		path    string
-		modTime time.Time
+		path      string
+		timestamp string
 	}
 	var backups []backupInfo
 
@@ -93,35 +94,37 @@ func (s *BackupService) cleanupOldBackups(backup config.BackupConfig) error {
 		if entry.IsDir() {
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".tar.gz") {
 			continue
 		}
+		// Extract timestamp from filename (format: YYYYMMDDHHMMSS.NNNNNN.tar.gz)
+		timestamp := strings.TrimSuffix(name, ".tar.gz")
 		backups = append(backups, backupInfo{
-			path:    filepath.Join(backupDir, entry.Name()),
-			modTime: info.ModTime(),
+			path:      filepath.Join(backupDir, name),
+			timestamp: timestamp,
 		})
 	}
 
-	// Sort by modification time (newest first)
-	for i := 0; i < len(backups)-1; i++ {
-		for j := i + 1; j < len(backups); j++ {
-			if backups[i].modTime.Before(backups[j].modTime) {
-				backups[i], backups[j] = backups[j], backups[i]
-			}
-		}
-	}
+	// Sort by timestamp (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].timestamp > backups[j].timestamp
+	})
 
 	// Remove old backups
-	for i := backup.Scheduler.MaxBackups; i < len(backups); i++ {
-		if err := os.Remove(backups[i].path); err != nil {
-			s.log.Error("Backup", "Failed to remove old backup: %s: %v", backups[i].path, err)
+	if len(backups) > backup.Scheduler.MaxBackups {
+		for i := backup.Scheduler.MaxBackups; i < len(backups); i++ {
+			s.log.Info("Backup", "[%s] Removing old backup: %s", backup.Name, backups[i].path)
+			if err := os.Remove(backups[i].path); err != nil {
+				s.log.Error("Backup", "[%s] Failed to remove old backup: %s: %v", backup.Name, backups[i].path, err)
+			}
 		}
 	}
 
 	return nil
 }
 
+// CreateBackup creates a backup of the specified backup configuration
 func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 	s.log.Info("Backup", "[%s] Starting backup process for %s (source: %s)", backup.Name, backup.Name, backup.SourcePath)
 
@@ -131,29 +134,30 @@ func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 		return fmt.Errorf("failed to create backup directory: %v", err)
 	}
 
-	// Generate backup filename with timestamp
-	timestamp := time.Now().Format("20060102150405")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s.tar.gz", timestamp))
+	// Generate backup filename with timestamp and microseconds for uniqueness
+	timestamp := time.Now().Format("20060102150405.000000")
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", backup.Name, timestamp))
 	s.log.Info("Backup", "[%s] Creating backup file for %s: %s", backup.Name, backup.Name, backupFile)
 
 	// Create backup archive
 	if err := s.archiveService.CreateBackupArchive(backup, backupFile); err != nil {
-		s.log.Error("Backup", "[%s] Failed to create backup for %s: %s: %v", backup.Name, backup.Name, backupFile, err)
-		return fmt.Errorf("failed to create backup: %v", err)
+		// Clean up the backup file if it exists
+		os.Remove(backupFile)
+		return fmt.Errorf("failed to create backup for %s: %s: %v", backup.Name, backupFile, err)
 	}
 
-	// Cleanup old backups
-	if err := s.cleanupOldBackups(backup); err != nil {
-		s.log.Error("Backup", "Failed to cleanup old backups for %s: %v", backup.Name, err)
-		// Don't return error here as the backup was successful
-	}
-
-	// Send to storage if configured
+	// Send backup to storage
 	if len(backup.Storage) > 0 {
 		if err := s.storageService.SendToStorage(backupFile, backup.Storage, backup.Name); err != nil {
-			s.log.Error("Backup", "[%s] Failed to send backup to storage: %v", backup.Name, err)
+			// Clean up the backup file if storage fails
+			os.Remove(backupFile)
 			return fmt.Errorf("failed to send backup to storage: %v", err)
 		}
+	}
+
+	// Clean up old backups
+	if err := s.cleanupOldBackups(backup); err != nil {
+		s.log.Error("Backup", "[%s] Failed to clean up old backups: %v", backup.Name, err)
 	}
 
 	s.log.Info("Backup", "[%s] Backup completed successfully: %s", backup.Name, backup.Name)
@@ -165,7 +169,7 @@ func (s *BackupService) backupFolder(backup config.BackupConfig, backupDir strin
 
 	// Create timestamp for backup file
 	timestamp := time.Now().Format("20060102150405")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s.tar.gz", timestamp))
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", backup.Name, timestamp))
 
 	// Create backup file
 	file, err := os.Create(backupFile)
