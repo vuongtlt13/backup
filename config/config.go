@@ -7,36 +7,52 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config represents the application configuration
 type Config struct {
-	Backups []BackupConfig `yaml:"backups"`
-	Storage map[string]StorageConfig `yaml:"storage"` // Map of storage configurations
+	Backups []BackupConfig            `yaml:"backups"`
+	Storage map[string]StorageConfig  `yaml:"storage"`
 }
 
+// BackupConfig represents a single backup configuration
 type BackupConfig struct {
 	Name       string   `yaml:"name"`
 	SourcePath string   `yaml:"source_path"`
-	Storages   []string `yaml:"storages"` // List of storage names to use
+	Storage    []string `yaml:"storage"`
+	// Scheduler configuration
+	Scheduler struct {
+		Enabled    bool   `yaml:"enabled"`
+		CronExpr   string `yaml:"cron_expr"`   // e.g. "0 2 * * *" for 2 AM daily
+		MaxBackups int    `yaml:"max_backups"` // Maximum number of backups to keep
+	} `yaml:"scheduler"`
+	// Ignore patterns for files and folders
+	Ignore struct {
+		Files   []string `yaml:"files"`    // e.g. ["*.log", "*.tmp", "temp.txt"]
+		Folders []string `yaml:"folders"`   // e.g. ["node_modules", ".git", "temp"]
+	} `yaml:"ignore"`
 }
 
+// StorageConfig represents storage configuration
 type StorageConfig struct {
-	Kind            string `yaml:"kind"` // Type of storage: "s3", "google_drive", "rsync"
-	Enabled         bool   `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
+	Kind    string `yaml:"kind"` // s3, rsync, google_drive
+
 	// S3 specific fields
-	Bucket          string `yaml:"bucket,omitempty"`
-	Region          string `yaml:"region,omitempty"`
-	AccessKey       string `yaml:"access_key,omitempty"`
-	SecretKey       string `yaml:"secret_key,omitempty"`
-	Path            string `yaml:"path,omitempty"`
+	Bucket          string `yaml:"bucket"`
+	Region          string `yaml:"region"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	SecretAccessKey string `yaml:"secret_access_key"`
+
 	// Google Drive specific fields
-	CredentialsFile string `yaml:"credentials_file,omitempty"`
-	FolderID        string `yaml:"folder_id,omitempty"`
+	CredentialsFile string `yaml:"credentials_file"`
+	FolderID        string `yaml:"folder_id"`
+
 	// Rsync specific fields
-	TargetServer    string `yaml:"target_server,omitempty"`
-	TargetPath      string `yaml:"target_path,omitempty"`
-	User            string `yaml:"user,omitempty"`
-	Port            int    `yaml:"port,omitempty"`
+	Server   string `yaml:"server"`
+	Username string `yaml:"username"`
+	Path     string `yaml:"path"`
 }
 
+// LoadConfig loads the configuration from a file
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

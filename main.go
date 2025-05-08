@@ -2,89 +2,85 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"backupdb/backup"
 	"backupdb/config"
 	"backupdb/logger"
-	"go.uber.org/zap"
+	"backupdb/storage"
 )
 
 func main() {
 	// Parse command line flags
-	configPath := flag.String("config", "config.yaml", "path to configuration file")
+	configFile := flag.String("config", "config.yaml", "Path to configuration file")
 	flag.Parse()
 
 	// Initialize logger
 	log := logger.Get()
-	defer logger.Sync()
+	defer log.Sync()
 
 	// Load configuration
-	cfg, err := config.LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
-		log.Fatal("Failed to load configuration",
-			zap.String("config_path", *configPath),
-			zap.Error(err),
-		)
+		log.Error("Config", "Failed to load configuration: %v", err)
+		os.Exit(1)
 	}
 
-	// Create backup service
+	// Create services
 	backupService := backup.NewBackupService(cfg)
+	storageService := storage.NewStorageService(cfg)
+	schedulerService := backup.NewSchedulerService(cfg)
 
-	// Process each backup configuration
-	for _, backupCfg := range cfg.Backups {
-		log.Info("Processing backup configuration",
-			zap.String("name", backupCfg.Name),
-			zap.String("source_path", backupCfg.SourcePath),
-		)
+	// Run initial backups
+	go func() {
+		for _, backup := range cfg.Backups {
+			if err := backupService.CreateBackup(backup); err != nil {
+				log.Error("Backup", "Failed to create backup for %s: %v", backup.Name, err)
+				continue
+			}
 
-		// Create backup
-		if err := backupService.CreateBackup(); err != nil {
-			log.Error("Failed to create backup",
-				zap.String("name", backupCfg.Name),
-				zap.Error(err),
-			)
-			continue
+			// Find the backup file
+			backupDir := filepath.Join("backups", backup.Name)
+			backupFiles, err := filepath.Glob(filepath.Join(backupDir, "*.tar.gz"))
+			if err != nil {
+				log.Error("Backup", "Failed to find backup files for %s: %v", backup.Name, err)
+				continue
+			}
+
+			if len(backupFiles) == 0 {
+				log.Error("Backup", "No backup files found for %s", backup.Name)
+				continue
+			}
+
+			// Get the most recent backup file
+			latestBackup := backupFiles[len(backupFiles)-1]
+
+			// Send to storage if configured
+			if len(backup.Storage) > 0 {
+				if err := storageService.SendToStorage(latestBackup, backup.Storage, backup.Name); err != nil {
+					log.Error("Backup", "[%s] Failed to send backup to storage: %v", backup.Name, err)
+					continue
+				}
+			}
+
+			log.Info("Backup", "Backup completed successfully for %s: %s", backup.Name, latestBackup)
 		}
 
-		// Find the backup file
-		backupDir := filepath.Join("backups", backupCfg.Name)
-		backupFiles, err := filepath.Glob(filepath.Join(backupDir, "*.tar.gz"))
-		if err != nil {
-			log.Error("Failed to find backup files",
-				zap.String("name", backupCfg.Name),
-				zap.Error(err),
-			)
-			continue
-		}
+		// Start the scheduler after initial backups
+		schedulerService.Start(backupService)
+	}()
 
-		if len(backupFiles) == 0 {
-			log.Error("No backup files found",
-				zap.String("name", backupCfg.Name),
-			)
-			continue
-		}
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
 
-		// Get the most recent backup file
-		latestBackup := backupFiles[len(backupFiles)-1]
-
-		// Send to storage
-		if err := backupService.SendToStorage(latestBackup, backupCfg.Storages); err != nil {
-			log.Error("Failed to send backup to storage",
-				zap.String("name", backupCfg.Name),
-				zap.String("file", latestBackup),
-				zap.Error(err),
-			)
-			continue
-		}
-
-		log.Info("Backup completed successfully",
-			zap.String("name", backupCfg.Name),
-			zap.String("file", latestBackup),
-		)
-	}
+	// Stop the scheduler gracefully
+	schedulerService.Stop()
+	log.Info("System", "Shutting down...")
 }
 
 func init() {
@@ -92,4 +88,4 @@ func init() {
 	if err := os.MkdirAll("backups", 0755); err != nil {
 		panic("Failed to create backups directory: " + err.Error())
 	}
-} 
+}

@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -23,7 +22,7 @@ const (
 type GoogleDriveProvider struct {
 	service *drive.Service
 	config  config.StorageConfig
-	logger  *logger.Logger
+	log     *logger.Logger
 }
 
 // NewGoogleDriveProvider creates a new Google Drive storage provider
@@ -33,9 +32,9 @@ func NewGoogleDriveProvider(cfg config.StorageConfig) (*GoogleDriveProvider, err
 	}
 
 	ctx := context.Background()
-	credentials, err := os.ReadFile(cfg.ServiceAccountFile)
+	credentials, err := os.ReadFile(cfg.CredentialsFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read service account file: %v", err)
+		return nil, fmt.Errorf("failed to read credentials file: %v", err)
 	}
 
 	config, err := google.JWTConfigFromJSON(credentials, drive.DriveFileScope)
@@ -51,13 +50,13 @@ func NewGoogleDriveProvider(cfg config.StorageConfig) (*GoogleDriveProvider, err
 	return &GoogleDriveProvider{
 		service: service,
 		config:  cfg,
-		logger:  logger.Get(),
+		log:     logger.Get(),
 	}, nil
 }
 
 // SendFile implements StorageProvider interface
 func (p *GoogleDriveProvider) SendFile(filePath string) error {
-	p.logger.Info("Starting file upload to Google Drive",
+	p.log.Info("Starting file upload to Google Drive",
 		"file", filePath,
 		"folder_id", p.config.FolderID)
 
@@ -67,20 +66,15 @@ func (p *GoogleDriveProvider) SendFile(filePath string) error {
 	}
 	defer file.Close()
 
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %v", err)
-	}
-
 	driveFile := &drive.File{
 		Name:    filepath.Base(filePath),
 		Parents: []string{p.config.FolderID},
 	}
 
 	_, err = p.service.Files.Create(driveFile).
-		Media(file, drive.ChunkSize(driveChunkSize)).
+		Media(file).
 		ProgressUpdater(func(current, total int64) {
-			p.logger.Info("Upload progress",
+			p.log.Info("Upload progress",
 				"file", filePath,
 				"current", current,
 				"total", total,
@@ -92,7 +86,7 @@ func (p *GoogleDriveProvider) SendFile(filePath string) error {
 		return fmt.Errorf("failed to upload file: %v", err)
 	}
 
-	p.logger.Info("File uploaded successfully to Google Drive",
+	p.log.Info("File uploaded successfully to Google Drive",
 		"file", filePath,
 		"folder_id", p.config.FolderID)
 
