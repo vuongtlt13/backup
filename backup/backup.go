@@ -128,6 +128,11 @@ func (s *BackupService) cleanupOldBackups(backup config.BackupConfig) error {
 func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 	s.log.Info("Backup", "[%s] Starting backup process for %s (source: %s)", backup.Name, backup.Name, backup.SourcePath)
 
+	// Check if source directory exists and is accessible
+	if _, err := os.Stat(backup.SourcePath); err != nil {
+		return fmt.Errorf("failed to access source directory: %v", err)
+	}
+
 	// Create backup directory if it doesn't exist
 	backupDir := filepath.Join("backups", backup.Name)
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
