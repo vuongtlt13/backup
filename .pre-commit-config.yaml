@@ -1,0 +1,16 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-test
+        name: go test
+        entry: go test -v ./...
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: go-lint
+        name: golangci-lint
+        entry: golangci-lint run
+        language: system
+        pass_filenames: false
+        types: [go] 
