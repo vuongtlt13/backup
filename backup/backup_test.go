@@ -155,6 +155,13 @@ func TestCreateBackup(t *testing.T) {
 			t.Skip("Skipping read-only test: cannot create test directory")
 		}
 
+		// Create a file in the read-only directory first
+		testFile := filepath.Join(readOnlyDir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+			os.RemoveAll(readOnlyDir)
+			t.Skip("Skipping read-only test: cannot create test file")
+		}
+
 		// Try to make directory read-only
 		if err := os.Chmod(readOnlyDir, 0000); err != nil {
 			os.RemoveAll(readOnlyDir)
