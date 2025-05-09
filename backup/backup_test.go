@@ -41,9 +41,14 @@ func TestNewBackupService(t *testing.T) {
 }
 
 func TestCreateBackup(t *testing.T) {
-	// Create temporary test directory structure
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
+	// Create test directory structure
+	testDir := "test_data"
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatalf("failed to create test directory: %v", err)
+	}
+	defer os.RemoveAll(testDir)
+
+	testFile := filepath.Join(testDir, "test.txt")
 	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
@@ -53,7 +58,7 @@ func TestCreateBackup(t *testing.T) {
 		Backups: []config.BackupConfig{
 			{
 				Name:       "test-backup",
-				SourcePath: tmpDir,
+				SourcePath: testDir,
 				Storage:    []string{}, // No storage for basic backup test
 				Scheduler: struct {
 					Enabled    bool   `yaml:"enabled"`
@@ -134,7 +139,7 @@ func TestCreateBackup(t *testing.T) {
 		invalidBackup.SourcePath = "non_existent_dir"
 		err := service.CreateBackup(invalidBackup)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create backup")
+		assert.Contains(t, err.Error(), "failed to access source directory")
 
 		// Verify no new backup file was created
 		entries, err := os.ReadDir(backupDir)
@@ -144,8 +149,8 @@ func TestCreateBackup(t *testing.T) {
 
 	// Test case 4: Backup with read-only source
 	t.Run("Read-only source", func(t *testing.T) {
-		// Create a read-only directory with no read permissions
-		readOnlyDir := filepath.Join(tmpDir, "readonly")
+		// Create a read-only directory
+		readOnlyDir := filepath.Join(testDir, "readonly")
 		if err := os.MkdirAll(readOnlyDir, 0755); err != nil {
 			t.Fatalf("failed to create readonly directory: %v", err)
 		}
@@ -154,8 +159,11 @@ func TestCreateBackup(t *testing.T) {
 		}
 		defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
 
+		// Create a backup config with the read-only directory
 		readOnlyBackup := cfg.Backups[0]
 		readOnlyBackup.SourcePath = readOnlyDir
+
+		// Attempt to create backup
 		err := service.CreateBackup(readOnlyBackup)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to create backup")
@@ -203,9 +211,14 @@ func TestCreateBackup(t *testing.T) {
 }
 
 func TestBackupFolder(t *testing.T) {
-	// Create temporary test directory structure
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
+	// Create test directory structure
+	testDir := "test_data_backup"
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatalf("failed to create test directory: %v", err)
+	}
+	defer os.RemoveAll(testDir)
+
+	testFile := filepath.Join(testDir, "test.txt")
 	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
@@ -215,7 +228,7 @@ func TestBackupFolder(t *testing.T) {
 		Backups: []config.BackupConfig{
 			{
 				Name:       "test-backup",
-				SourcePath: tmpDir,
+				SourcePath: testDir,
 				Storage:    []string{"s3"},
 				Ignore: struct {
 					Files   []string `yaml:"files"`
@@ -250,13 +263,13 @@ func TestBackupFolder(t *testing.T) {
 	defer os.RemoveAll("backups")
 
 	// Create a temporary file that should be ignored
-	tmpFile := filepath.Join(tmpDir, "test.tmp")
+	tmpFile := filepath.Join(testDir, "test.tmp")
 	if err := os.WriteFile(tmpFile, []byte("temp content"), 0644); err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
 	// Create a directory that should be ignored
-	tempDir := filepath.Join(tmpDir, "temp")
+	tempDir := filepath.Join(testDir, "temp")
 	if err := os.MkdirAll(tempDir, 0755); err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
@@ -322,11 +335,16 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestShouldIgnoreFile(t *testing.T) {
-	// Create temporary test directory structure
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-	tempFile := filepath.Join(tmpDir, "test.tmp")
-	tempDir := filepath.Join(tmpDir, "temp")
+	// Create test directory structure
+	testDir := "test_data_ignore"
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		t.Fatalf("failed to create test directory: %v", err)
+	}
+	defer os.RemoveAll(testDir)
+
+	testFile := filepath.Join(testDir, "test.txt")
+	tempFile := filepath.Join(testDir, "test.tmp")
+	tempDir := filepath.Join(testDir, "temp")
 
 	// Create test files and directories
 	os.WriteFile(testFile, []byte("test content"), 0644)
@@ -338,7 +356,7 @@ func TestShouldIgnoreFile(t *testing.T) {
 		Backups: []config.BackupConfig{
 			{
 				Name:       "test-backup",
-				SourcePath: tmpDir,
+				SourcePath: testDir,
 				Ignore: struct {
 					Files   []string `yaml:"files"`
 					Folders []string `yaml:"folders"`
@@ -360,6 +378,6 @@ func TestShouldIgnoreFile(t *testing.T) {
 
 	t.Run("Ignore folder pattern", func(t *testing.T) {
 		assert.True(t, service.shouldIgnoreFile(tempDir, cfg.Backups[0]))
-		assert.False(t, service.shouldIgnoreFile(tmpDir, cfg.Backups[0]))
+		assert.False(t, service.shouldIgnoreFile(testDir, cfg.Backups[0]))
 	})
 }
