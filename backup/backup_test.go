@@ -166,7 +166,9 @@ func TestCreateBackup(t *testing.T) {
 		// Attempt to create backup
 		err := service.CreateBackup(readOnlyBackup)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create backup")
+		if err != nil {
+			assert.Contains(t, err.Error(), "permission denied")
+		}
 
 		// Verify no new backup file was created
 		entries, err := os.ReadDir(backupDir)
