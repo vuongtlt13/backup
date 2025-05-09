@@ -113,7 +113,7 @@ func TestCreateBackup(t *testing.T) {
 
 		// Verify backup file name format and size
 		backupFile := filepath.Join(backupDir, entries[0].Name())
-		assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.\\d{6}\\.tar\\.gz$", cfg.Backups[0].Name), entries[0].Name(), "Backup filename should match the expected format")
+		assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}(_\\d+)?\\.tar\\.gz$", cfg.Backups[0].Name), entries[0].Name(), "Backup filename should match the expected format")
 		info, err := os.Stat(backupFile)
 		assert.NoError(t, err)
 		assert.Greater(t, info.Size(), int64(0))
@@ -162,12 +162,16 @@ func TestCreateBackup(t *testing.T) {
 			t.Skip("Skipping read-only test: cannot create test file")
 		}
 
-		// Try to make directory read-only
-		if err := os.Chmod(readOnlyDir, 0000); err != nil {
+		// Try to make directory completely inaccessible
+		if err := os.Chmod(readOnlyDir, 0); err != nil {
 			os.RemoveAll(readOnlyDir)
 			t.Skip("Skipping read-only test: cannot set directory permissions")
 		}
-		defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
+		defer func() {
+			// Restore permissions for cleanup
+			os.Chmod(readOnlyDir, 0755)
+			os.RemoveAll(readOnlyDir)
+		}()
 
 		// Create a backup config with the read-only directory
 		readOnlyBackup := cfg.Backups[0]
@@ -175,6 +179,12 @@ func TestCreateBackup(t *testing.T) {
 
 		// Attempt to create backup
 		err := service.CreateBackup(readOnlyBackup)
+		if err == nil {
+			// If backup succeeds, try to verify if we can actually read the directory
+			if _, err := os.ReadDir(readOnlyDir); err == nil {
+				t.Skip("Skipping read-only test: directory is still accessible")
+			}
+		}
 		assert.Error(t, err)
 		if err != nil {
 			assert.Contains(t, err.Error(), "permission denied")
@@ -210,7 +220,7 @@ func TestCreateBackup(t *testing.T) {
 		for _, entry := range entries {
 			filenames = append(filenames, entry.Name())
 			// Verify filename format
-			assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.\\d{6}\\.tar\\.gz$", cfg.Backups[0].Name), entry.Name(), "Backup filename should match the expected format")
+			assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}(_\\d+)?\\.tar\\.gz$", cfg.Backups[0].Name), entry.Name(), "Backup filename should match the expected format")
 		}
 		sort.Strings(filenames)
 		sort.Sort(sort.Reverse(sort.StringSlice(filenames)))
@@ -296,7 +306,7 @@ func TestBackupFolder(t *testing.T) {
 	_, err = os.Stat(backupFile)
 	assert.NoError(t, err)
 	// Verify backup file name format
-	assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}\\.tar\\.gz$", cfg.Backups[0].Name), filepath.Base(backupFile), "Backup filename should match the expected format")
+	assert.Regexp(t, fmt.Sprintf("^%s_\\d{14}(_\\d+)?\\.tar\\.gz$", cfg.Backups[0].Name), filepath.Base(backupFile), "Backup filename should match the expected format")
 }
 
 func TestCopyDirectory(t *testing.T) {

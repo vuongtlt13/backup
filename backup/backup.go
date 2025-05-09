@@ -139,9 +139,20 @@ func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 		return fmt.Errorf("failed to create backup directory: %v", err)
 	}
 
-	// Generate backup filename with timestamp and microseconds for uniqueness
-	timestamp := time.Now().Format("20060102150405.000000")
+	// Generate backup filename with timestamp
+	timestamp := time.Now().Format("20060102150405")
 	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", backup.Name, timestamp))
+
+	// Check if file exists and add suffix if needed
+	suffix := 1
+	for {
+		if _, err := os.Stat(backupFile); os.IsNotExist(err) {
+			break
+		}
+		backupFile = filepath.Join(backupDir, fmt.Sprintf("%s_%s_%d.tar.gz", backup.Name, timestamp, suffix))
+		suffix++
+	}
+
 	s.log.Info("Backup", "[%s] Creating backup file for %s: %s", backup.Name, backup.Name, backupFile)
 
 	// Create backup archive
