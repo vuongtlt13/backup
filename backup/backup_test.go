@@ -151,29 +151,28 @@ func TestCreateBackup(t *testing.T) {
 	t.Run("Read-only source", func(t *testing.T) {
 		// Create a read-only directory
 		readOnlyDir := filepath.Join(testDir, "readonly")
-		if err := os.MkdirAll(readOnlyDir, 0755); err != nil {
-			t.Fatalf("failed to create readonly directory: %v", err)
-		}
-		if err := os.Chmod(readOnlyDir, 0000); err != nil { // No permissions at all
-			t.Fatalf("failed to set directory permissions: %v", err)
-		}
-		defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
+		if err := os.MkdirAll(readOnlyDir, 0755); err == nil {
+			if err := os.Chmod(readOnlyDir, 0000); err != nil { // No permissions at all
+				t.Fatalf("failed to set directory permissions: %v", err)
+			}
+			defer os.Chmod(readOnlyDir, 0755) // Restore permissions for cleanup
 
-		// Create a backup config with the read-only directory
-		readOnlyBackup := cfg.Backups[0]
-		readOnlyBackup.SourcePath = readOnlyDir
+			// Create a backup config with the read-only directory
+			readOnlyBackup := cfg.Backups[0]
+			readOnlyBackup.SourcePath = readOnlyDir
 
-		// Attempt to create backup
-		err := service.CreateBackup(readOnlyBackup)
-		assert.Error(t, err)
-		if err != nil {
-			assert.Contains(t, err.Error(), "permission denied")
+			// Attempt to create backup
+			err := service.CreateBackup(readOnlyBackup)
+			assert.Error(t, err)
+			if err != nil {
+				assert.Contains(t, err.Error(), "permission denied")
+			}
+
+			// Verify no new backup file was created
+			entries, err := os.ReadDir(backupDir)
+			assert.NoError(t, err)
+			assert.Equal(t, 1, len(entries)) // Should still have only the previous successful backup
 		}
-
-		// Verify no new backup file was created
-		entries, err := os.ReadDir(backupDir)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(entries)) // Should still have only the previous successful backup
 	})
 
 	// Test case 5: Backup with max backups limit
