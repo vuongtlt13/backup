@@ -39,7 +39,7 @@ func (p *RsyncProvider) SendFile(backupDir string) error {
 	cmd := exec.Command("rsync",
 		"-avzr",
 		"-e",
-		fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d", p.config.Port),
+		fmt.Sprintf("\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d\"", p.config.Port),
 		"--delete",
 		"--progress",
 		backupDir,
