@@ -57,10 +57,11 @@ func main() {
 
 			// Get the most recent backup file
 			latestBackup := backupFiles[len(backupFiles)-1]
+			log.Info("Backup", "Latest backup for %s: %s", backup.Name, latestBackup)
 
 			// Send to storage if configured
 			if len(backup.Storage) > 0 {
-				if err := storageService.SendToStorage(latestBackup, backup.Storage, backup.Name); err != nil {
+				if err := storageService.SendToStorage(backupDir, backup.Storage, backup.Name); err != nil {
 					log.Error("Backup", "[%s] Failed to send backup to storage: %v", backup.Name, err)
 					continue
 				}

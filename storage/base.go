@@ -71,13 +71,13 @@ func NewStorageService(cfg *config.Config) *StorageService {
 	return service
 }
 
-// SendToStorage sends a backup file to all specified storage providers
-func (s *StorageService) SendToStorage(filePath string, storageNames []string, backupName string) error {
-	s.log.Info("Storage", "[%s] Sending file to storage: %s", backupName, filePath)
+// SendToStorage sends backup files to all specified storage providers
+func (s *StorageService) SendToStorage(backupDir string, storageNames []string, backupName string) error {
+	s.log.Info("Storage", "[%s] Sending files to storage: %s", backupName, backupDir)
 
 	// Verify file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return fmt.Errorf("backup file does not exist: %s", filePath)
+	if _, err := os.Stat(backupDir); os.IsNotExist(err) {
+		return fmt.Errorf("backup dir does not exist: %s", backupDir)
 	}
 
 	// Track if any storage provider succeeded
@@ -95,7 +95,7 @@ func (s *StorageService) SendToStorage(filePath string, storageNames []string, b
 
 		s.log.Info("Storage", "[%s] -> Sending file to provider: %s", backupName, name)
 
-		if err := provider.SendFile(filePath); err != nil {
+		if err := provider.SendFile(backupDir); err != nil {
 			s.log.Error("Storage", "[%s] Failed to send file to provider %s: %v", backupName, name, err)
 			lastError = err
 			continue
@@ -109,7 +109,7 @@ func (s *StorageService) SendToStorage(filePath string, storageNames []string, b
 		return fmt.Errorf("failed to send file to any storage provider: %v", lastError)
 	}
 
-	s.log.Info("Storage", "[%s] File sent successfully to at least one provider: %s", backupName, filePath)
+	s.log.Info("Storage", "[%s] Files sent successfully to at least one provider: %s", backupName, backupDir)
 	return nil
 }
 
