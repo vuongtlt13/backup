@@ -38,6 +38,8 @@ func (p *RsyncProvider) SendFile(backupDir string) error {
 	p.log.Info("S3", "rsync with host: %s", fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path))
 	cmd := exec.Command("rsync",
 		"-avzr",
+		"-e",
+		fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d", p.config.Port),
 		"--delete",
 		"--progress",
 		backupDir,
