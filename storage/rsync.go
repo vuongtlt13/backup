@@ -35,6 +35,7 @@ func (p *RsyncProvider) SendFile(filePath string) error {
 	)
 
 	// Construct rsync command
+	p.log.Info("S3", "rsync with host: %s", fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path))
 	cmd := exec.Command("rsync",
 		"-avz",
 		"--progress",
@@ -45,6 +46,7 @@ func (p *RsyncProvider) SendFile(filePath string) error {
 	// Capture output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		p.log.Error("S3", string(output))
 		p.log.Error("Failed to send file via rsync",
 			"file", filePath,
 			"server", p.config.Server,
