@@ -23,24 +23,23 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o backupdb
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     ca-certificates \
     tzdata \
-    rsync
+    openssh \
+    rsync \
+    bash
 
 # Create necessary directories
 RUN mkdir -p /app/backups /app/config && \
-    chown -R 999:999 /app
+    chown -R 999:0 /app && chmod -R 755 /app
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/backupdb /app/
-COPY --from=builder /app/config.yaml /app/config/
-
-# Switch to non-root user
-USER 999
+COPY --from=builder /app/config.yaml.example /app/config/config.yaml
 
 # Set environment variables
 ENV TZ=UTC
