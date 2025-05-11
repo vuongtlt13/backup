@@ -28,9 +28,6 @@ RUN apk add --no-cache \
     tzdata \
     rsync
 
-# Create non-root user with specific UID
-RUN adduser -D -u 999 -g '' backupuser
-
 # Create necessary directories
 RUN mkdir -p /app/backups /app/config && \
     chown -R backupuser:backupuser /app
@@ -43,7 +40,7 @@ COPY --from=builder /app/backupdb /app/
 COPY --from=builder /app/config.yaml /app/config/
 
 # Switch to non-root user
-USER backupuser
+USER 999
 
 # Set environment variables
 ENV TZ=UTC
