@@ -27,9 +27,9 @@ func NewRsyncProvider(cfg config.StorageConfig) (*RsyncProvider, error) {
 }
 
 // SendFile implements StorageProvider interface
-func (p *RsyncProvider) SendFile(filePath string) error {
+func (p *RsyncProvider) SendFile(backupDir string) error {
 	p.log.Info("Sending file via rsync",
-		"file", filePath,
+		"file", backupDir,
 		"server", p.config.Server,
 		"path", p.config.Path,
 	)
@@ -37,9 +37,10 @@ func (p *RsyncProvider) SendFile(filePath string) error {
 	// Construct rsync command
 	p.log.Info("S3", "rsync with host: %s", fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path))
 	cmd := exec.Command("rsync",
-		"-avz",
+		"-avzr",
+		"--delete",
 		"--progress",
-		filePath,
+		backupDir,
 		fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path),
 	)
 
@@ -48,7 +49,7 @@ func (p *RsyncProvider) SendFile(filePath string) error {
 	if err != nil {
 		p.log.Error("S3", string(output))
 		p.log.Error("Failed to send file via rsync",
-			"file", filePath,
+			"file", backupDir,
 			"server", p.config.Server,
 			"error", err,
 			"output", string(output),
@@ -57,7 +58,7 @@ func (p *RsyncProvider) SendFile(filePath string) error {
 	}
 
 	p.log.Info("File sent successfully via rsync",
-		"file", filePath,
+		"file", backupDir,
 		"server", p.config.Server,
 		"output", string(output),
 	)

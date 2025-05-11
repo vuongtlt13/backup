@@ -164,7 +164,7 @@ func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 
 	// Send backup to storage
 	if len(backup.Storage) > 0 {
-		if err := s.storageService.SendToStorage(backupFile, backup.Storage, backup.Name); err != nil {
+		if err := s.storageService.SendToStorage(backupDir, backup.Storage, backup.Name); err != nil {
 			// Clean up the backup file if storage fails
 			os.Remove(backupFile)
 			return fmt.Errorf("failed to send backup to storage: %v", err)
