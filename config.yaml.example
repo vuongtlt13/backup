@@ -1,0 +1,32 @@
+backups:
+  # Database backups
+  - name: "mysql_data"
+    source_path: "./data/mysql"
+    storage: ["rsync"]
+    scheduler:
+      enabled: true
+      cron_expr: "* * * * *"  # Run at 2 AM daily
+      max_backups: 7
+    ignore:
+      files: ["*.log", "*.tmp", "mysql.sock"]
+      folders: ["temp", "cache"]
+
+  - name: "postgres_data"
+    source_path: "./data/postgres"
+    storage: ["google_drive", "s3"]
+    scheduler:
+      enabled: true
+      cron_expr: "* * * * *"  # Run at 3 AM on Monday, Wednesday, and Friday
+      max_backups: 7
+    ignore:
+      files: ["*.log", "*.tmp", "postmaster.pid"]
+      folders: ["pg_wal", "pg_stat"]
+
+storage:
+  rsync:
+    kind: "rsync"
+    enabled: true
+    server: "123.232.23.2"
+    username: "root"
+    path: "/root/backups/"
+    port: 22
