@@ -30,7 +30,7 @@ RUN apk add --no-cache \
 
 # Create necessary directories
 RUN mkdir -p /app/backups /app/config && \
-    chown -R backupuser:backupuser /app
+    chown -R 999:999 /app
 
 # Set working directory
 WORKDIR /app
