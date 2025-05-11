@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"backupdb/config"
 	"backupdb/logger"
@@ -35,21 +36,24 @@ func (p *RsyncProvider) SendFile(backupDir string) error {
 	)
 
 	// Construct rsync command
-	p.log.Info("S3", "rsync with host: %s", fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path))
+	p.log.Info("Rsync", "rsync with host: %s", fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path))
+	//rsync -avzr -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 22" --delete --progress ./backups/plus500_db roo@194.233.71.140:/root/backups/
 	cmd := exec.Command("rsync",
 		"-avzr",
 		"-e",
-		fmt.Sprintf("\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d\"", p.config.Port),
+		fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d", p.config.Port),
 		"--delete",
 		"--progress",
 		backupDir,
 		fmt.Sprintf("%s@%s:%s", p.config.Username, p.config.Server, p.config.Path),
 	)
+	p.log.Info("Rsync", "Running command:")
+	p.log.Info("Rsync", strings.Join(cmd.Args, " "))
 
 	// Capture output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		p.log.Error("S3", string(output))
+		p.log.Error("Rsync", string(output))
 		p.log.Error("Failed to send file via rsync",
 			"file", backupDir,
 			"server", p.config.Server,
