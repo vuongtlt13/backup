@@ -14,28 +14,7 @@ import (
 )
 
 func TestNewBackupService(t *testing.T) {
-	// Create test config
-	cfg := &config.Config{
-		Backups: []config.BackupConfig{
-			{
-				Name:       "test-backup",
-				SourcePath: "/test/path",
-				Storage:    []string{"s3"},
-			},
-		},
-		Storage: map[string]config.StorageConfig{
-			"s3": {
-				Enabled:         true,
-				Kind:            "s3",
-				Bucket:          "test-bucket",
-				Region:          "us-west-2",
-				AccessKeyID:     "test-access-key",
-				SecretAccessKey: "test-secret-key",
-			},
-		},
-	}
-
-	// Create service
+	cfg := &config.Config{}
 	service := NewBackupService(cfg)
 	assert.NotNil(t, service)
 }
@@ -336,7 +315,6 @@ func TestCopyDirectory(t *testing.T) {
 }
 
 func TestCopyFile(t *testing.T) {
-	// Create test file
 	srcFile := "test_source.txt"
 	dstFile := "test_destination.txt"
 	testContent := []byte("test content")
@@ -357,23 +335,18 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestShouldIgnoreFile(t *testing.T) {
-	// Create test directory structure
 	testDir := "test_data_ignore"
-	if err := os.MkdirAll(testDir, 0755); err != nil {
-		t.Fatalf("failed to create test directory: %v", err)
-	}
+	os.MkdirAll(testDir, 0755)
 	defer os.RemoveAll(testDir)
 
 	testFile := filepath.Join(testDir, "test.txt")
 	tempFile := filepath.Join(testDir, "test.tmp")
 	tempDir := filepath.Join(testDir, "temp")
 
-	// Create test files and directories
 	os.WriteFile(testFile, []byte("test content"), 0644)
 	os.WriteFile(tempFile, []byte("temp content"), 0644)
 	os.MkdirAll(tempDir, 0755)
 
-	// Create test config
 	cfg := &config.Config{
 		Backups: []config.BackupConfig{
 			{
@@ -389,17 +362,11 @@ func TestShouldIgnoreFile(t *testing.T) {
 			},
 		},
 	}
-
 	service := NewBackupService(cfg)
 
 	// Test cases
-	t.Run("Ignore file pattern", func(t *testing.T) {
-		assert.True(t, service.shouldIgnoreFile(tempFile, cfg.Backups[0]))
-		assert.False(t, service.shouldIgnoreFile(testFile, cfg.Backups[0]))
-	})
-
-	t.Run("Ignore folder pattern", func(t *testing.T) {
-		assert.True(t, service.shouldIgnoreFile(tempDir, cfg.Backups[0]))
-		assert.False(t, service.shouldIgnoreFile(testDir, cfg.Backups[0]))
-	})
+	assert.True(t, service.shouldIgnoreFile(tempFile, cfg.Backups[0]))
+	assert.False(t, service.shouldIgnoreFile(testFile, cfg.Backups[0]))
+	assert.True(t, service.shouldIgnoreFile(tempDir, cfg.Backups[0]))
+	assert.False(t, service.shouldIgnoreFile(testDir, cfg.Backups[0]))
 }

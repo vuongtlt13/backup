@@ -10,6 +10,7 @@ import (
 	"backupdb/backup"
 	"backupdb/config"
 	"backupdb/logger"
+	"backupdb/scheduler"
 	"backupdb/storage"
 )
 
@@ -32,7 +33,7 @@ func main() {
 	// Create services
 	backupService := backup.NewBackupService(cfg)
 	storageService := storage.NewStorageService(cfg)
-	schedulerService := backup.NewSchedulerService(cfg)
+	schedulerService := scheduler.NewSchedulerService(cfg)
 
 	// Run initial backups
 	go func() {

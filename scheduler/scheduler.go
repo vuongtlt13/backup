@@ -1,4 +1,4 @@
-package backup
+package scheduler
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"backupdb/backup"
 	"backupdb/config"
 	"backupdb/logger"
 )
@@ -36,7 +37,7 @@ func getCronInstance(expr string) *cron.Cron {
 }
 
 // Start starts the scheduler service
-func (s *SchedulerService) Start(backupService *BackupService) {
+func (s *SchedulerService) Start(backupService *backup.BackupService) {
 	s.log.Info("Scheduler", "Starting scheduler service")
 
 	// Schedule each backup

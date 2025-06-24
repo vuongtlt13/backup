@@ -11,15 +11,24 @@ import (
 	"strings"
 	"time"
 
+	"backupdb/archive"
 	"backupdb/config"
 	"backupdb/logger"
 	"backupdb/storage"
 )
 
+// BackupTask is the interface for all backup types (folder, mysql, postgres)
+type BackupTask interface {
+	// Run executes the backup process
+	Run(backup config.BackupConfig, backupDir, backupFile string, log *logger.Logger) error
+	// Kind returns the type of backup ("folder", "mysql", "postgres", ...)
+	Kind() string
+}
+
 type BackupService struct {
 	config         *config.Config
 	log            *logger.Logger
-	archiveService *ArchiveService
+	archiveService *archive.ArchiveService
 	storageService *storage.StorageService
 }
 
@@ -27,7 +36,7 @@ func NewBackupService(cfg *config.Config) *BackupService {
 	return &BackupService{
 		config:         cfg,
 		log:            logger.Get(),
-		archiveService: NewArchiveService(),
+		archiveService: archive.NewArchiveService(),
 		storageService: storage.NewStorageService(cfg),
 	}
 }
@@ -126,52 +135,42 @@ func (s *BackupService) cleanupOldBackups(backup config.BackupConfig) error {
 
 // CreateBackup creates a backup of the specified backup configuration
 func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
-	s.log.Info("Backup", "[%s] Starting backup process for %s (source: %s)", backup.Name, backup.Name, backup.SourcePath)
+	s.log.Info("Backup", "[%s] Starting backup process for %s (type: %s, source: %s)", backup.Name, backup.Name, backup.Type, backup.SourcePath)
 
-	// Check if source directory exists and is accessible
-	if _, err := os.Stat(backup.SourcePath); err != nil {
-		return fmt.Errorf("failed to access source directory: %v", err)
-	}
-
-	// Create backup directory if it doesn't exist
 	backupDir := filepath.Join("backups", backup.Name)
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %v", err)
 	}
-
-	// Generate backup filename with timestamp
 	timestamp := time.Now().Format("20060102150405")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", backup.Name, timestamp))
+	nano := time.Now().Nanosecond()
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s_%09d.tar.gz", backup.Name, timestamp, nano))
 
-	// Check if file exists and add suffix if needed
-	suffix := 1
-	for {
-		if _, err := os.Stat(backupFile); os.IsNotExist(err) {
-			break
-		}
-		backupFile = filepath.Join(backupDir, fmt.Sprintf("%s_%s_%d.tar.gz", backup.Name, timestamp, suffix))
-		suffix++
+	// Select the appropriate backup type
+	var task BackupTask
+	switch backup.Type {
+	case "mysql":
+		task = &MySQLBackup{archiveService: s.archiveService}
+	case "postgres":
+		task = &PostgresBackup{archiveService: s.archiveService}
+	case "folder", "":
+		task = &FolderBackup{archiveService: s.archiveService}
+	default:
+		return fmt.Errorf("unsupported backup type: %s", backup.Type)
+	}
+	// Run backup, only create file if source is valid
+	if err := task.Run(backup, backupDir, backupFile, s.log); err != nil {
+		os.Remove(backupFile) // Ensure no leftover file
+		return err
 	}
 
-	s.log.Info("Backup", "[%s] Creating backup file for %s: %s", backup.Name, backup.Name, backupFile)
-
-	// Create backup archive
-	if err := s.archiveService.CreateBackupArchive(backup, backupFile); err != nil {
-		// Clean up the backup file if it exists
-		os.Remove(backupFile)
-		return fmt.Errorf("failed to create backup for %s: %s: %v", backup.Name, backupFile, err)
-	}
-
-	// Send backup to storage
+	// Only send to storage if backup file exists
 	if len(backup.Storage) > 0 {
 		if err := s.storageService.SendToStorage(backupDir, backup.Storage, backup.Name); err != nil {
-			// Clean up the backup file if storage fails
-			os.Remove(backupFile)
+			os.Remove(backupFile) // Remove only the new backup file
 			return fmt.Errorf("failed to send backup to storage: %v", err)
 		}
 	}
 
-	// Clean up old backups
 	if err := s.cleanupOldBackups(backup); err != nil {
 		s.log.Error("Backup", "[%s] Failed to clean up old backups: %v", backup.Name, err)
 	}
@@ -185,7 +184,8 @@ func (s *BackupService) backupFolder(backup config.BackupConfig, backupDir strin
 
 	// Create timestamp for backup file
 	timestamp := time.Now().Format("20060102150405")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s.tar.gz", backup.Name, timestamp))
+	nano := time.Now().Nanosecond()
+	backupFile := filepath.Join(backupDir, fmt.Sprintf("%s_%s_%09d.tar.gz", backup.Name, timestamp, nano))
 
 	// Create backup file
 	file, err := os.Create(backupFile)

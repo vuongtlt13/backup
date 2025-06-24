@@ -18,6 +18,12 @@ type BackupConfig struct {
 	Name       string   `yaml:"name"`
 	SourcePath string   `yaml:"source_path"`
 	Storage    []string `yaml:"storage"`
+
+	// New fields for DB backup
+	Type string     `yaml:"type"` // folder, mysql, postgres
+	SSH  *SSHConfig `yaml:"ssh,omitempty"`
+	DB   *DBConfig  `yaml:"db,omitempty"`
+
 	// Scheduler configuration
 	Scheduler struct {
 		Enabled    bool   `yaml:"enabled"`
@@ -29,6 +35,22 @@ type BackupConfig struct {
 		Files   []string `yaml:"files"`   // e.g. ["*.log", "*.tmp", "temp.txt"]
 		Folders []string `yaml:"folders"` // e.g. ["node_modules", ".git", "temp"]
 	} `yaml:"ignore"`
+}
+
+// SSHConfig holds SSH connection info
+type SSHConfig struct {
+	Host    string `yaml:"host"`
+	Port    int    `yaml:"port"`
+	User    string `yaml:"user"`
+	KeyFile string `yaml:"key_file"`
+}
+
+// DBConfig holds database info for dump
+type DBConfig struct {
+	Name        string   `yaml:"name"`
+	User        string   `yaml:"user"`
+	Password    string   `yaml:"password"`
+	DumpOptions []string `yaml:"dump_options"`
 }
 
 // StorageConfig represents storage configuration

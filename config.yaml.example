@@ -22,6 +22,63 @@ backups:
       files: ["*.log", "*.tmp", "postmaster.pid"]
       folders: ["pg_wal", "pg_stat"]
 
+# Example: Backup folder
+- name: myfolder_backup
+  type: folder
+  source_path: /data/myfolder
+  storage: [s3, google_drive]
+  scheduler:
+    enabled: true
+    cron_expr: "0 2 * * *"
+    max_backups: 7
+  ignore:
+    files: ["*.log", "*.tmp"]
+    folders: ["node_modules", ".git"]
+
+# Example: Backup MySQL database via SSH
+- name: mydb_backup
+  type: mysql
+  ssh:
+    host: 1.2.3.4
+    port: 22
+    user: root
+    key_file: /path/to/private_key
+  db:
+    name: mydb
+    user: dbuser
+    password: dbpass
+    dump_options: ["--single-transaction", "--quick"]
+  storage: [s3]
+  scheduler:
+    enabled: true
+    cron_expr: "0 3 * * *"
+    max_backups: 7
+  ignore:
+    files: []
+    folders: []
+
+# Example: Backup PostgreSQL database via SSH
+- name: mypg_backup
+  type: postgres
+  ssh:
+    host: 5.6.7.8
+    port: 22
+    user: postgres
+    key_file: /path/to/private_key
+  db:
+    name: mypgdb
+    user: pguser
+    password: pgpass
+    dump_options: ["--no-owner", "--no-acl"]
+  storage: [google_drive]
+  scheduler:
+    enabled: false
+    cron_expr: ""
+    max_backups: 3
+  ignore:
+    files: []
+    folders: []
+
 storage:
   rsync:
     kind: "rsync"
