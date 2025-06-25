@@ -34,7 +34,7 @@ func TestSchedulerService_Start_Stop(t *testing.T) {
 	}
 	s := NewSchedulerService(cfg)
 	backupService := backup.NewBackupService(cfg)
-	// Start và Stop không panic
+	// Start and Stop should not panic
 	s.Start(backupService)
 	s.Stop()
 }

@@ -22,68 +22,103 @@ backups:
       files: ["*.log", "*.tmp", "postmaster.pid"]
       folders: ["pg_wal", "pg_stat"]
 
-# Example: Backup folder
-- name: myfolder_backup
-  type: folder
-  source_path: /data/myfolder
-  storage: [s3, google_drive]
-  scheduler:
-    enabled: true
-    cron_expr: "0 2 * * *"
-    max_backups: 7
-  ignore:
-    files: ["*.log", "*.tmp"]
-    folders: ["node_modules", ".git"]
+  # Example: Backup folder
+  - name: myfolder_backup
+    type: folder
+    source_path: /data/myfolder
+    storage: [s3, google_drive]
+    scheduler:
+      enabled: true
+      cron_expr: "0 2 * * *"
+      max_backups: 7
+    ignore:
+      files: ["*.log", "*.tmp"]
+      folders: ["node_modules", ".git"]
 
-# Example: Backup MySQL database via SSH
-- name: mydb_backup
-  type: mysql
-  ssh:
-    host: 1.2.3.4
-    port: 22
-    user: root
-    key_file: /path/to/private_key
-  db:
-    name: mydb
-    user: dbuser
-    password: dbpass
-    dump_options: ["--single-transaction", "--quick"]
-  storage: [s3]
-  scheduler:
-    enabled: true
-    cron_expr: "0 3 * * *"
-    max_backups: 7
-  ignore:
-    files: []
-    folders: []
+  # Example: Backup MySQL database via SSH
+  - name: mydb_backup
+    type: mysql
+    ssh:
+      host: 1.2.3.4
+      port: 22
+      user: root
+      key_file: /path/to/private_key
+    db:
+      name: mydb
+      user: dbuser
+      password: dbpass
+      dump_options: ["--single-transaction", "--quick"]
+    storage: [s3]
+    scheduler:
+      enabled: true
+      cron_expr: "0 3 * * *"
+      max_backups: 7
+    ignore:
+      files: []
+      folders: []
 
-# Example: Backup PostgreSQL database via SSH
-- name: mypg_backup
-  type: postgres
-  ssh:
-    host: 5.6.7.8
-    port: 22
-    user: postgres
-    key_file: /path/to/private_key
-  db:
-    name: mypgdb
-    user: pguser
-    password: pgpass
-    dump_options: ["--no-owner", "--no-acl"]
-  storage: [google_drive]
-  scheduler:
-    enabled: false
-    cron_expr: ""
-    max_backups: 3
-  ignore:
-    files: []
-    folders: []
+  # Example: Backup PostgreSQL database via SSH
+  - name: mypg_backup
+    type: postgres
+    ssh:
+      host: 5.6.7.8
+      port: 22
+      user: postgres
+      key_file: /path/to/private_key
+    db:
+      name: mypgdb
+      user: pguser
+      password: pgpass
+      dump_options: ["--no-owner", "--no-acl"]
+    storage: [google_drive]
+    scheduler:
+      enabled: false
+      cron_expr: ""
+      max_backups: 3
+    ignore:
+      files: []
+      folders: []
+
+  # Example: Backup multiple MySQL databases (each database will be a separate .sql file in the archive)
+  - name: mysql-multi-db-backup
+    type: mysql
+    source_path: /tmp
+    storage: [s3, rsync]
+    ssh:
+      host: your-server.com
+      port: 22
+      user: your-username
+      key_file: /path/to/your/private/key
+    db:
+      databases: ["db1", "db2", "db3"]
+      # Or backup all databases (except system databases)
+      # name: "__ALL__"
+      # exclude_databases: ["information_schema", "performance_schema", "mysql", "sys"]
+      user: mysql_user
+      password: mysql_password
+      dump_options: ["--single-transaction", "--routines", "--triggers"]
+    scheduler:
+      enabled: true
+      cron_expr: "0 2 * * *"
+      max_backups: 7
 
 storage:
+  s3:
+    enabled: false
+    kind: s3
+    bucket: your-bucket
+    region: ap-southeast-1
+    access_key_id: your-access-key
+    secret_access_key: your-secret-key
   rsync:
-    kind: "rsync"
-    enabled: true
-    server: "123.232.23.2"
-    username: "root"
-    path: "/root/backups/"
+    enabled: false
+    kind: rsync
+    server: your-server.com
+    username: your-username
+    path: /path/to/backup
     port: 22
+  google_drive:
+    enabled: false
+    kind: google_drive
+    credentials_file: /path/to/credentials.json
+    folder_id: your-folder-id

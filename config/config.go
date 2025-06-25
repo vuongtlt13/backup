@@ -47,10 +47,16 @@ type SSHConfig struct {
 
 // DBConfig holds database info for dump
 type DBConfig struct {
-	Name        string   `yaml:"name"`
-	User        string   `yaml:"user"`
-	Password    string   `yaml:"password"`
-	DumpOptions []string `yaml:"dump_options"`
+	Name             string   `yaml:"name"`
+	Databases        []string `yaml:"databases"`
+	ExcludeDatabases []string `yaml:"exclude_databases"`
+	User             string   `yaml:"user"`
+	Password         string   `yaml:"password"`
+	DumpOptions      []string `yaml:"dump_options"`
+	MySQLPath        string   `yaml:"mysql_path"`     // Path to mysql binary
+	MysqldumpPath    string   `yaml:"mysqldump_path"` // Path to mysqldump binary
+	PSQLPath         string   `yaml:"psql_path"`      // Path to psql binary (for Postgres)
+	PGDumpPath       string   `yaml:"pg_dump_path"`   // Path to pg_dump binary (for Postgres)
 }
 
 // StorageConfig represents storage configuration

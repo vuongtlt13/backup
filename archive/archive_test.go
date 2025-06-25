@@ -76,7 +76,7 @@ func TestCreateBackupArchive_CannotWriteArchive(t *testing.T) {
 		Name:       "nowrite",
 		SourcePath: dir,
 	}
-	// Đường dẫn không ghi được
+	// Path that cannot be written
 	archiveFile := "/root/nowrite.tar.gz"
 
 	service := NewArchiveService()
