@@ -82,7 +82,7 @@ backups:
   # Example: Backup multiple MySQL databases (each database will be a separate .sql file in the archive)
   - name: mysql-multi-db-backup
     type: mysql
-    source_path: /tmp
+    source_path: ./data/mysql-dumps
     storage: [s3, rsync]
     ssh:
       host: your-server.com
@@ -103,6 +103,7 @@ backups:
       max_backups: 7
 
 storage:
+  # AWS S3
   s3:
     enabled: false
     kind: s3
@@ -110,6 +111,17 @@ storage:
     region: ap-southeast-1
     access_key_id: your-access-key
     secret_access_key: your-secret-key
+
+  # Local MinIO, see docs/s3-guide.md
+  s3_local:
+    enabled: false
+    kind: s3
+    bucket: backup-smoke
+    region: us-east-1
+    access_key_id: minioadmin
+    secret_access_key: minioadmin
+    endpoint: http://localhost:9000
+    force_path_style: true
   rsync:
     enabled: false
     kind: rsync

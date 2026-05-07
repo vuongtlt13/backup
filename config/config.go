@@ -69,6 +69,8 @@ type StorageConfig struct {
 	Region          string `yaml:"region"`
 	AccessKeyID     string `yaml:"access_key_id"`
 	SecretAccessKey string `yaml:"secret_access_key"`
+	Endpoint        string `yaml:"endpoint"`
+	ForcePathStyle  bool   `yaml:"force_path_style"`
 
 	// Google Drive specific fields
 	AuthMode         string `yaml:"auth_mode"`

@@ -5,8 +5,8 @@ A robust backup service written in Go that supports multiple storage backends (S
 ## Features
 
 - Multiple storage backends support:
-  - Amazon S3
-  - Rsync
+  - Amazon S3 ([setup guide](docs/s3-guide.md))
+  - Rsync ([setup guide](docs/rsync-guide.md))
   - Google Drive ([setup guide](docs/google-drive-guide.md))
 - Scheduled backups using cron expressions
 - Configurable backup retention
@@ -83,7 +83,11 @@ Run the service with your config:
 go run . --config config.yaml
 ```
 
-For setup and an end-to-end upload check with a real Google account, see [Google Drive guide](docs/google-drive-guide.md).
+Provider setup guides:
+
+- [S3 guide](docs/s3-guide.md)
+- [Rsync guide](docs/rsync-guide.md)
+- [Google Drive guide](docs/google-drive-guide.md)
 
 ## Running with Docker
 

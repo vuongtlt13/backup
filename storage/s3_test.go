@@ -5,11 +5,11 @@ import (
 
 	"backupdb/config"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewS3Provider(t *testing.T) {
-	// Test with valid config but invalid credentials
 	cfg := config.StorageConfig{
 		Enabled:         true,
 		Kind:            "s3",
@@ -20,10 +20,9 @@ func TestNewS3Provider(t *testing.T) {
 	}
 
 	provider, err := NewS3Provider(cfg)
-	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Error(t, err)
 	assert.Nil(t, provider)
 
-	// Test with disabled config
 	disabledCfg := config.StorageConfig{
 		Enabled: false,
 		Kind:    "s3",
@@ -33,7 +32,6 @@ func TestNewS3Provider(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, provider)
 
-	// Test with missing credentials
 	invalidCfg := config.StorageConfig{
 		Enabled: true,
 		Kind:    "s3",
@@ -46,8 +44,18 @@ func TestNewS3Provider(t *testing.T) {
 	assert.Nil(t, provider)
 }
 
+func TestNewS3ClientOptions(t *testing.T) {
+	client := newS3Client(aws.Config{Region: "us-east-1"}, config.StorageConfig{
+		Endpoint:       "http://localhost:9000",
+		ForcePathStyle: true,
+	})
+
+	options := client.Options()
+	assert.Equal(t, "http://localhost:9000", *options.BaseEndpoint)
+	assert.True(t, options.UsePathStyle)
+}
+
 func TestS3ProviderSendFile(t *testing.T) {
-	// Create test config with invalid credentials
 	cfg := config.StorageConfig{
 		Enabled:         true,
 		Kind:            "s3",
@@ -58,6 +66,6 @@ func TestS3ProviderSendFile(t *testing.T) {
 	}
 
 	provider, err := NewS3Provider(cfg)
-	assert.Error(t, err) // Should error because credentials are invalid
+	assert.Error(t, err)
 	assert.Nil(t, provider)
 }

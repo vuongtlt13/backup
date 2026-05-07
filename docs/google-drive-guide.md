@@ -101,8 +101,8 @@ The folder ID is:
 From the project root, create a temporary source folder:
 
 ```bash
-mkdir -p tmp/google-drive-smoke/source
-printf 'google drive smoke test\n' > tmp/google-drive-smoke/source/test.txt
+mkdir -p data/smoke/source
+printf 'google drive smoke test\n' > data/smoke/source/test.txt
 ```
 
 ## 6. Create a smoke test config
@@ -115,7 +115,7 @@ For service account mode:
 backups:
   - name: google_drive_smoke
     type: folder
-    source_path: ./tmp/google-drive-smoke/source
+    source_path: ./data/smoke/source
     storage: [google_drive]
     scheduler:
       enabled: false
@@ -140,7 +140,7 @@ For OAuth user mode:
 backups:
   - name: google_drive_smoke
     type: folder
-    source_path: ./tmp/google-drive-smoke/source
+    source_path: ./data/smoke/source
     storage: [google_drive]
     scheduler:
       enabled: false

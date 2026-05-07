@@ -56,7 +56,7 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 	}
 
 	// Create S3 client
-	client := s3.NewFromConfig(awsCfg)
+	client := newS3Client(awsCfg, cfg)
 
 	// Validate credentials by trying to list buckets
 	_, err = client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
@@ -69,6 +69,15 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 		client: client,
 		log:    logger.Get(),
 	}, nil
+}
+
+func newS3Client(awsCfg aws.Config, cfg config.StorageConfig) *s3.Client {
+	return s3.NewFromConfig(awsCfg, func(options *s3.Options) {
+		if cfg.Endpoint != "" {
+			options.BaseEndpoint = aws.String(cfg.Endpoint)
+		}
+		options.UsePathStyle = cfg.ForcePathStyle
+	})
 }
 
 // SendFile implements StorageProvider interface
