@@ -1,3 +1,6 @@
 .idea
 backups
 config.yaml
+/*.json
+/config.google-drive-smoke.yaml
+/tmp/

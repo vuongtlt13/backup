@@ -7,7 +7,7 @@ A robust backup service written in Go that supports multiple storage backends (S
 - Multiple storage backends support:
   - Amazon S3
   - Rsync
-  - Google Drive
+  - Google Drive ([setup guide](docs/google-drive-guide.md))
 - Scheduled backups using cron expressions
 - Configurable backup retention
 - File/folder exclusion patterns
@@ -45,13 +45,13 @@ Create a `config.yaml` file in the project root:
 ```yaml
 backups:
   - name: mysql_data
-    source: ./data/mysql
+    type: folder
+    source_path: ./data/mysql
     storage:
-      - s3
-      - rsync
+      - google_drive
     scheduler:
       enabled: true
-      cron_expr: "0 2 * * *"  # Run at 2 AM daily
+      cron_expr: "0 2 * * *"
       max_backups: 7
     ignore:
       files:
@@ -62,21 +62,28 @@ backups:
         - "cache"
 
 storage:
-  s3:
+  google_drive:
     enabled: true
-    kind: s3
-    bucket: your-bucket
-    region: your-region
-    access_key: your-access-key
-    secret_key: your-secret-key
-
-  rsync:
-    enabled: true
-    kind: rsync
-    host: backup-server
-    path: /backups
-    user: backup-user
+    kind: google_drive
+    credentials_file: /app/config/service-account.json
+    folder_id: your-google-drive-folder-id
 ```
+
+### Google Drive setup
+
+1. Enable the Google Drive API in your Google Cloud project.
+2. Create a service account and download its JSON key file.
+3. Open the destination folder in Google Drive and share it with the service account email from the JSON file.
+4. Set `credentials_file` to the JSON key path and `folder_id` to the destination folder ID.
+5. Add `google_drive` to the backup's `storage` list.
+
+Run the service with your config:
+
+```bash
+go run . --config config.yaml
+```
+
+For setup and an end-to-end upload check with a real Google account, see [Google Drive guide](docs/google-drive-guide.md).
 
 ## Running with Docker
 

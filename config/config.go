@@ -71,8 +71,11 @@ type StorageConfig struct {
 	SecretAccessKey string `yaml:"secret_access_key"`
 
 	// Google Drive specific fields
-	CredentialsFile string `yaml:"credentials_file"`
-	FolderID        string `yaml:"folder_id"`
+	AuthMode         string `yaml:"auth_mode"`
+	CredentialsFile  string `yaml:"credentials_file"`
+	ClientSecretFile string `yaml:"client_secret_file"`
+	TokenFile        string `yaml:"token_file"`
+	FolderID         string `yaml:"folder_id"`
 
 	// Rsync specific fields
 	Server   string `yaml:"server"`

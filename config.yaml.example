@@ -117,8 +117,19 @@ storage:
     username: your-username
     path: /path/to/backup
     port: 22
+  # Service account mode: use with Google Workspace Shared Drive
   google_drive:
+    enabled: true
+    kind: google_drive
+    auth_mode: service_account
+    credentials_file: /path/to/service-account.json
+    folder_id: your-google-drive-folder-id
+
+  # OAuth user mode: use with personal My Drive
+  google_drive_oauth:
     enabled: false
     kind: google_drive
-    credentials_file: /path/to/credentials.json
-    folder_id: your-folder-id
+    auth_mode: oauth_user
+    client_secret_file: /path/to/oauth-client-secret.json
+    token_file: /path/to/google-drive-token.json
+    folder_id: your-google-drive-folder-id

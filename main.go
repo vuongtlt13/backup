@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"flag"
+	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strings"
 	"syscall"
 
 	"backupdb/backup"
@@ -12,30 +16,35 @@ import (
 	"backupdb/logger"
 	"backupdb/scheduler"
 	"backupdb/storage"
+
+	"golang.org/x/oauth2"
 )
 
 func main() {
-	// Parse command line flags
 	configFile := flag.String("config", "config.yaml", "Path to configuration file")
+	googleDriveAuthInit := flag.String("gdrive-auth-init", "", "Initialize OAuth token for the named Google Drive storage")
 	flag.Parse()
 
-	// Initialize logger
 	log := logger.Get()
 	defer log.Sync()
 
-	// Load configuration
 	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
 		log.Error("Config", "Failed to load configuration: %v", err)
 		os.Exit(1)
 	}
 
-	// Create services
+	if *googleDriveAuthInit != "" {
+		if err := initializeGoogleDriveOAuth(cfg, *googleDriveAuthInit); err != nil {
+			log.Error("Google Drive OAuth", "%v", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	backupService := backup.NewBackupService(cfg)
-	storageService := storage.NewStorageService(cfg)
 	schedulerService := scheduler.NewSchedulerService(cfg)
 
-	// Run initial backups
 	go func() {
 		for _, backup := range cfg.Backups {
 			if err := backupService.CreateBackup(backup); err != nil {
@@ -43,50 +52,80 @@ func main() {
 				continue
 			}
 
-			// Find the backup file
-			backupDir := filepath.Join("backups", backup.Name)
-			backupFiles, err := filepath.Glob(filepath.Join(backupDir, "*.tar.gz"))
-			if err != nil {
-				log.Error("Backup", "Failed to find backup files for %s: %v", backup.Name, err)
-				continue
-			}
-
-			if len(backupFiles) == 0 {
-				log.Error("Backup", "No backup files found for %s", backup.Name)
-				continue
-			}
-
-			// Get the most recent backup file
-			latestBackup := backupFiles[len(backupFiles)-1]
-			log.Info("Backup", "Latest backup for %s: %s", backup.Name, latestBackup)
-
-			// Send to storage if configured
-			if len(backup.Storage) > 0 {
-				if err := storageService.SendToStorage(backupDir, backup.Storage, backup.Name); err != nil {
-					log.Error("Backup", "[%s] Failed to send backup to storage: %v", backup.Name, err)
-					continue
-				}
-			}
-
-			log.Info("Backup", "Backup completed successfully for %s: %s", backup.Name, latestBackup)
+			log.Info("Backup", "Backup completed successfully for %s", backup.Name)
 		}
 
-		// Start the scheduler after initial backups
 		schedulerService.Start(backupService)
 	}()
 
-	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	// Stop the scheduler gracefully
 	schedulerService.Stop()
 	log.Info("System", "Shutting down...")
 }
 
+func initializeGoogleDriveOAuth(cfg *config.Config, storageName string) error {
+	storageCfg, exists := cfg.Storage[storageName]
+	if !exists {
+		return fmt.Errorf("storage %s not found", storageName)
+	}
+	if storageCfg.Kind != "google_drive" {
+		return fmt.Errorf("storage %s is not a google_drive provider", storageName)
+	}
+	if storageCfg.AuthMode != "oauth_user" {
+		return fmt.Errorf("storage %s must set auth_mode: oauth_user", storageName)
+	}
+
+	oauthConfig, err := storage.NewGoogleDriveOAuthConfig(storageCfg)
+	if err != nil {
+		return err
+	}
+
+	authURL := oauthConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	fmt.Println("Open this URL in your browser:")
+	fmt.Println(authURL)
+	fmt.Println()
+	fmt.Print("Paste the authorization code or full callback URL: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read authorization code: %v", err)
+	}
+	code, err := googleDriveOAuthCodeFromInput(input)
+	if err != nil {
+		return err
+	}
+
+	token, err := oauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		return fmt.Errorf("failed to exchange authorization code: %v", err)
+	}
+	if err := storage.SaveOAuthToken(storageCfg.TokenFile, token); err != nil {
+		return err
+	}
+
+	fmt.Printf("Google Drive OAuth token saved to %s\n", storageCfg.TokenFile)
+	return nil
+}
+
+func googleDriveOAuthCodeFromInput(input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", fmt.Errorf("authorization code or callback URL is required")
+	}
+
+	parsedURL, err := url.Parse(input)
+	if err == nil && parsedURL.Query().Get("code") != "" {
+		return parsedURL.Query().Get("code"), nil
+	}
+
+	return input, nil
+}
+
 func init() {
-	// Create backups directory if it doesn't exist
 	if err := os.MkdirAll("backups", 0755); err != nil {
 		panic("Failed to create backups directory: " + err.Error())
 	}
