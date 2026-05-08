@@ -1,0 +1,16 @@
+services:
+  backupdb:
+    image: vuongtlt13/backup:latest
+    container_name: backupdb
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+    volumes:
+      - ./config.yaml:/app/config/config.yaml:ro
+      - ./backups:/app/backups
+      - ./data:/app/data:ro
+      # Google Drive service account or OAuth files, if needed:
+      # - ./service-account.json:/app/config/service-account.json:ro
+      # - ./google-drive-oauth:/app/config/google-drive-oauth
+      # SSH key for rsync or SSH database dumps, if needed:
+      # - ~/.ssh/id_rsa:/app/config/id_rsa:ro

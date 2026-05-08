@@ -96,18 +96,190 @@ Provider and backup setup guides:
 
 ## Running with Docker
 
-1. Build the Docker image:
+Use the published image:
+
 ```bash
-docker build -t backupdb .
+docker pull vuongtlt13/backup
 ```
 
-2. Run the container:
+Create a local config file from `config.yaml.example`, then mount it into the container at `/app/config/config.yaml`:
+
 ```bash
 docker run -d \
-  -v /path/to/backups:/app/backups \
-  -v /path/to/config.yaml:/app/config/config.yaml \
-  -v /path/to/credentials.json:/app/config/credentials.json \
-  backupdb
+  --name backupdb \
+  --restart unless-stopped \
+  -v $(pwd)/config.yaml:/app/config/config.yaml:ro \
+  -v $(pwd)/backups:/app/backups \
+  -v $(pwd)/data:/app/data:ro \
+  vuongtlt13/backup
+```
+
+The container runs:
+
+```bash
+/app/backupdb --config /app/config/config.yaml
+```
+
+### Docker Compose
+
+Create `docker-compose.yaml`:
+
+```yaml
+services:
+  backupdb:
+    image: vuongtlt13/backup:latest
+    container_name: backupdb
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+    volumes:
+      - ./config.yaml:/app/config/config.yaml:ro
+      - ./backups:/app/backups
+      - ./data:/app/data:ro
+      # Google Drive service account or OAuth files, if needed:
+      # - ./service-account.json:/app/config/service-account.json:ro
+      # - ./google-drive-oauth:/app/config/google-drive-oauth
+      # SSH key for rsync or SSH database dumps, if needed:
+      # - ~/.ssh/id_rsa:/app/config/id_rsa:ro
+```
+
+The same content is also available in `docker-compose.example.yaml`.
+
+Run it:
+
+```bash
+docker compose up -d
+```
+
+View logs:
+
+```bash
+docker compose logs -f backupdb
+```
+
+Stop it:
+
+```bash
+docker compose down
+```
+
+### Mount paths
+
+Use container paths in `config.yaml`, not host paths. For example, if you mount host `./data` to container `/app/data`, configure folder backups like this:
+
+```yaml
+backups:
+  - name: mysql_data
+    type: folder
+    source_path: /app/data/mysql
+```
+
+Common mounts:
+
+- `/app/config/config.yaml`: your backup configuration.
+- `/app/backups`: local archive output and retention directory.
+- `/app/data`: source folders to back up when using `type: folder`.
+- `/app/config/*.json`: Google Drive service account, OAuth client secret, or token files.
+- SSH keys can be mounted read-only if using rsync or SSH database dumps.
+
+### Google Drive credentials example
+
+```bash
+docker run -d \
+  --name backupdb \
+  --restart unless-stopped \
+  -v $(pwd)/config.yaml:/app/config/config.yaml:ro \
+  -v $(pwd)/backups:/app/backups \
+  -v $(pwd)/data:/app/data:ro \
+  -v $(pwd)/service-account.json:/app/config/service-account.json:ro \
+  vuongtlt13/backup
+```
+
+Then set the credential path in `config.yaml`:
+
+```yaml
+storage:
+  google_drive:
+    enabled: true
+    kind: google_drive
+    auth_mode: service_account
+    credentials_file: /app/config/service-account.json
+    folder_id: your-google-drive-folder-id
+```
+
+### OAuth token initialization in Docker
+
+For Google Drive OAuth user mode, run the token init command interactively once:
+
+```bash
+docker run --rm -it \
+  -v $(pwd)/config.yaml:/app/config/config.yaml:ro \
+  -v $(pwd)/google-drive-oauth:/app/config/google-drive-oauth \
+  vuongtlt13/backup \
+  --config /app/config/config.yaml \
+  --gdrive-auth-init google_drive_oauth
+```
+
+Mount the same token directory in the long-running container:
+
+```bash
+-v $(pwd)/google-drive-oauth:/app/config/google-drive-oauth
+```
+
+### Cloudflare R2 or S3 example
+
+No extra credential files are needed for S3/R2 if credentials are stored in `config.yaml`:
+
+```yaml
+storage:
+  r2:
+    enabled: true
+    kind: s3
+    bucket: your-r2-bucket-name
+    region: auto
+    access_key_id: your-r2-access-key-id
+    secret_access_key: your-r2-secret-access-key
+    endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
+    force_path_style: true
+    object_key_prefix: backups
+    skip_bucket_validation: true
+```
+
+### Rsync or SSH database dump example
+
+Mount your SSH key read-only and reference the container path in `config.yaml`:
+
+```bash
+docker run -d \
+  --name backupdb \
+  --restart unless-stopped \
+  -v $(pwd)/config.yaml:/app/config/config.yaml:ro \
+  -v $(pwd)/backups:/app/backups \
+  -v $HOME/.ssh/id_rsa:/app/config/id_rsa:ro \
+  vuongtlt13/backup
+```
+
+```yaml
+ssh:
+  host: your-server.com
+  port: 22
+  user: root
+  key_file: /app/config/id_rsa
+```
+
+### Logs and stopping
+
+```bash
+docker logs -f backupdb
+docker stop backupdb
+docker rm backupdb
+```
+
+### Build locally instead
+
+```bash
+docker build -t backupdb .
+docker run -d --name backupdb -v $(pwd)/config.yaml:/app/config/config.yaml:ro backupdb
 ```
 
 ## Development
