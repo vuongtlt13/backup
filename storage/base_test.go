@@ -68,11 +68,14 @@ func TestSendToStorage(t *testing.T) {
 	service := NewStorageService(cfg)
 	assert.NotNil(t, service)
 
+	backup := config.BackupConfig{Name: "backup-name", Storage: []string{"non-existent"}}
+
 	// Test sending to non-existent storage
-	err := service.SendToStorage("test.txt", []string{"non-existent"}, "backup-name")
+	err := service.SendToStorage("test.txt", backup)
 	assert.Error(t, err)
 
 	// Test sending to valid storage
-	err = service.SendToStorage("test.txt", []string{"s3"}, "backup-name")
+	backup.Storage = []string{"s3"}
+	err = service.SendToStorage("test.txt", backup)
 	assert.Error(t, err) // Should error because we can't actually connect to S3
 }

@@ -5,6 +5,12 @@ backups:
     type: folder
     source_path: "./data/mysql"
     storage: ["r2"]
+    object_key_prefix: mysql
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
     scheduler:
       enabled: true
       cron_expr: "0 2 * * *"
@@ -17,6 +23,12 @@ backups:
     type: folder
     source_path: "./data/postgres"
     storage: ["r2"]
+    object_key_prefix: postgres
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
     scheduler:
       enabled: true
       cron_expr: "30 2 * * *"
@@ -30,6 +42,11 @@ backups:
     type: folder
     source_path: /data/myfolder
     storage: [s3, google_drive]
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
     scheduler:
       enabled: true
       cron_expr: "0 2 * * *"
@@ -136,7 +153,6 @@ storage:
     secret_access_key: your-r2-secret-access-key
     endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
     force_path_style: true
-    object_key_prefix: backups
     skip_bucket_validation: true
   rsync:
     enabled: false

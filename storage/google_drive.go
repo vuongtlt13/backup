@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
 
 	"backupdb/config"
 	"backupdb/logger"
@@ -20,7 +24,14 @@ import (
 const (
 	googleDriveAuthModeServiceAccount = "service_account"
 	googleDriveAuthModeOAuthUser      = "oauth_user"
+	googleDriveFolderMimeType         = "application/vnd.google-apps.folder"
 )
+
+type googleDriveBackupFile struct {
+	ID        string
+	Name      string
+	Timestamp time.Time
+}
 
 // GoogleDriveProvider implements StorageProvider for Google Drive
 type GoogleDriveProvider struct {
@@ -171,6 +182,93 @@ func SaveOAuthToken(path string, token *oauth2.Token) error {
 	return nil
 }
 
+func googleDriveQueryValue(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	return strings.ReplaceAll(value, `'`, `\'`)
+}
+
+func googleDriveBackupListQuery(folderID, backupName string) string {
+	return fmt.Sprintf("'%s' in parents and trashed = false and mimeType != '%s' and name contains '%s_'",
+		googleDriveQueryValue(folderID),
+		googleDriveFolderMimeType,
+		googleDriveQueryValue(backupName),
+	)
+}
+
+func parseGoogleDriveBackupFile(id, name, backupName string) (googleDriveBackupFile, bool) {
+	pattern := fmt.Sprintf(`^%s_(\d{14})(?:_\d{1,9})?\.tar\.gz$`, regexp.QuoteMeta(backupName))
+	matches := regexp.MustCompile(pattern).FindStringSubmatch(name)
+	if len(matches) != 2 {
+		return googleDriveBackupFile{}, false
+	}
+
+	timestamp, err := time.Parse("20060102150405", matches[1])
+	if err != nil {
+		return googleDriveBackupFile{}, false
+	}
+
+	return googleDriveBackupFile{ID: id, Name: name, Timestamp: timestamp}, true
+}
+
+func selectGoogleDriveBackupsToDelete(files []googleDriveBackupFile, retention config.RemoteRetentionConfig, now time.Time) []googleDriveBackupFile {
+	if len(files) == 0 {
+		return nil
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Timestamp.After(files[j].Timestamp)
+	})
+
+	keep := make(map[string]bool)
+	currentYear, currentMonth, _ := now.Date()
+	daily := make(map[string][]googleDriveBackupFile)
+	monthly := make(map[string][]googleDriveBackupFile)
+	yearly := make(map[string][]googleDriveBackupFile)
+
+	for _, file := range files {
+		year, month, _ := file.Timestamp.Date()
+		switch {
+		case year == currentYear && month == currentMonth:
+			dayKey := file.Timestamp.Format("2006-01-02")
+			daily[dayKey] = append(daily[dayKey], file)
+		case year == currentYear:
+			monthKey := file.Timestamp.Format("2006-01")
+			monthly[monthKey] = append(monthly[monthKey], file)
+		default:
+			yearKey := file.Timestamp.Format("2006")
+			yearly[yearKey] = append(yearly[yearKey], file)
+		}
+	}
+
+	markGoogleDriveBackupsToKeep(daily, retention.MaxPerDay, keep)
+	markGoogleDriveBackupsToKeep(monthly, retention.MaxPerMonth, keep)
+	markGoogleDriveBackupsToKeep(yearly, retention.MaxPerYear, keep)
+
+	var toDelete []googleDriveBackupFile
+	for _, file := range files {
+		if !keep[file.ID] {
+			toDelete = append(toDelete, file)
+		}
+	}
+	return toDelete
+}
+
+func markGoogleDriveBackupsToKeep(groups map[string][]googleDriveBackupFile, max int, keep map[string]bool) {
+	for _, group := range groups {
+		if max <= 0 {
+			for _, file := range group {
+				keep[file.ID] = true
+			}
+			continue
+		}
+		for i, file := range group {
+			if i < max {
+				keep[file.ID] = true
+			}
+		}
+	}
+}
+
 // SendFile implements StorageProvider interface
 func (p *GoogleDriveProvider) SendFile(filePath string) error {
 	p.log.Info("Starting file upload to Google Drive",
@@ -208,6 +306,58 @@ func (p *GoogleDriveProvider) SendFile(filePath string) error {
 		"file", filePath,
 		"folder_id", p.config.FolderID)
 
+	return nil
+}
+
+func (p *GoogleDriveProvider) CleanupRemoteBackups(backup config.BackupConfig) error {
+	if !backup.RemoteRetention.Enabled {
+		return nil
+	}
+
+	query := googleDriveBackupListQuery(p.config.FolderID, backup.Name)
+	call := p.service.Files.List().
+		Q(query).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		PageSize(1000).
+		Fields("nextPageToken, files(id, name, mimeType)")
+
+	var files []googleDriveBackupFile
+	for {
+		result, err := call.Do()
+		if err != nil {
+			return fmt.Errorf("failed to list Google Drive files for retention: %v", err)
+		}
+
+		for _, driveFile := range result.Files {
+			if driveFile.MimeType == googleDriveFolderMimeType {
+				continue
+			}
+			backupFile, ok := parseGoogleDriveBackupFile(driveFile.Id, driveFile.Name, backup.Name)
+			if ok {
+				files = append(files, backupFile)
+			}
+		}
+
+		if result.NextPageToken == "" {
+			break
+		}
+		call.PageToken(result.NextPageToken)
+	}
+
+	toDelete := selectGoogleDriveBackupsToDelete(files, backup.RemoteRetention, time.Now())
+	for _, file := range toDelete {
+		if err := p.service.Files.Delete(file.ID).SupportsAllDrives(true).Do(); err != nil {
+			return fmt.Errorf("failed to delete Google Drive file %s (%s): %v", file.Name, file.ID, err)
+		}
+	}
+
+	p.log.Info("Google Drive remote retention completed",
+		"backup", backup.Name,
+		"folder_id", p.config.FolderID,
+		"matched", len(files),
+		"deleted", len(toDelete),
+	)
 	return nil
 }
 

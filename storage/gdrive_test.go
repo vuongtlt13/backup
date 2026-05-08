@@ -159,6 +159,83 @@ func TestGoogleDriveOAuthTokenLoadSave(t *testing.T) {
 	assert.Equal(t, token.TokenType, loadedToken.TokenType)
 }
 
+func TestGoogleDriveBackupListQuery(t *testing.T) {
+	query := googleDriveBackupListQuery(`folder'id\\x`, `mysql_data'prod`)
+
+	assert.Contains(t, query, `'folder\'id\\\\x' in parents`)
+	assert.Contains(t, query, "trashed = false")
+	assert.Contains(t, query, "mimeType != 'application/vnd.google-apps.folder'")
+	assert.Contains(t, query, `name contains 'mysql_data\'prod_'`)
+}
+
+func TestParseGoogleDriveBackupFile(t *testing.T) {
+	file, ok := parseGoogleDriveBackupFile("file-id", "mysql_data_20260508010203_123456789.tar.gz", "mysql_data")
+	assert.True(t, ok)
+	assert.Equal(t, "file-id", file.ID)
+	assert.Equal(t, "mysql_data_20260508010203_123456789.tar.gz", file.Name)
+	assert.Equal(t, time.Date(2026, 5, 8, 1, 2, 3, 0, time.UTC), file.Timestamp)
+
+	file, ok = parseGoogleDriveBackupFile("file-id", "mysql_data_20260508010203.tar.gz", "mysql_data")
+	assert.True(t, ok)
+	assert.Equal(t, "mysql_data_20260508010203.tar.gz", file.Name)
+
+	_, ok = parseGoogleDriveBackupFile("file-id", "mysql_data_extra_20260508010203_123456789.tar.gz", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseGoogleDriveBackupFile("file-id", "postgres_data_20260508010203_123456789.tar.gz", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseGoogleDriveBackupFile("file-id", "mysql_data_20260508010203_123456789.zip", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseGoogleDriveBackupFile("file-id", "mysql_data_20260532010203_123456789.tar.gz", "mysql_data")
+	assert.False(t, ok)
+}
+
+func TestSelectGoogleDriveBackupsToDelete(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	files := []googleDriveBackupFile{
+		{ID: "day-3", Name: "mysql_data_20260508030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 3, 0, 0, 0, time.UTC)},
+		{ID: "day-2", Name: "mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{ID: "day-1", Name: "mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "month-new", Name: "mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
+		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "year-new", Name: "mysql_data_20250301000000_000000001.tar.gz", Timestamp: time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "year-old", Name: "mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectGoogleDriveBackupsToDelete(files, config.RemoteRetentionConfig{
+		Enabled:     true,
+		MaxPerDay:   3,
+		MaxPerMonth: 1,
+		MaxPerYear:  1,
+	}, now)
+
+	assert.ElementsMatch(t, []googleDriveBackupFile{
+		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "year-old", Name: "mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}, toDelete)
+}
+
+func TestSelectGoogleDriveBackupsToDeleteZeroMaxKeepsTier(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	files := []googleDriveBackupFile{
+		{ID: "new", Name: "mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{ID: "old", Name: "mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectGoogleDriveBackupsToDelete(files, config.RemoteRetentionConfig{
+		Enabled:     true,
+		MaxPerDay:   0,
+		MaxPerMonth: 1,
+		MaxPerYear:  1,
+	}, now)
+
+	assert.Empty(t, toDelete)
+}
+
 func TestGoogleDriveProviderSendFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	credentialsFile := filepath.Join(tmpDir, "credentials.json")

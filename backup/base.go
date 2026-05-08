@@ -165,9 +165,12 @@ func (s *BackupService) CreateBackup(backup config.BackupConfig) error {
 
 	// Only send to storage if backup file exists
 	if len(backup.Storage) > 0 {
-		if err := s.storageService.SendToStorage(backupFile, backup.Storage, backup.Name); err != nil {
+		if err := s.storageService.SendToStorage(backupFile, backup); err != nil {
 			os.Remove(backupFile) // Remove only the new backup file
 			return fmt.Errorf("failed to send backup to storage: %v", err)
+		}
+		if err := s.storageService.CleanupRemoteRetention(backup); err != nil {
+			s.log.Error("Backup", "[%s] Failed to clean up remote backups: %v", backup.Name, err)
 		}
 	}
 

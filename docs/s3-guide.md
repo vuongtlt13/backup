@@ -8,13 +8,14 @@ Create or choose an S3 bucket and an IAM access key that can upload objects to t
 
 Minimum IAM actions for the configured bucket:
 
-- `s3:ListBucket` for startup bucket access validation.
+- `s3:ListBucket` for startup bucket access validation and remote retention.
 - `s3:PutObject` for uploads.
+- `s3:DeleteObject` for remote retention.
 
 Optional fields:
 
-- `object_key_prefix`: stores archives under a folder-like prefix inside the bucket, such as `mysql` or `prod/mysql`.
-- `skip_bucket_validation`: skips startup bucket validation and checks permissions only when uploading.
+- Backup-level `object_key_prefix`: stores that backup job's archives under a folder-like prefix inside the bucket, such as `mysql` or `prod/mysql`.
+- Storage-level `skip_bucket_validation`: skips startup bucket validation and checks upload permissions only when uploading.
 
 Example:
 
@@ -24,6 +25,7 @@ backups:
     type: folder
     source_path: ./data/smoke/source
     storage: [s3]
+    object_key_prefix: backups
     scheduler:
       enabled: false
       cron_expr: ""
@@ -40,10 +42,9 @@ storage:
     region: ap-southeast-1
     access_key_id: your-access-key-id
     secret_access_key: your-secret-access-key
-    object_key_prefix: backups
 ```
 
-With `object_key_prefix: backups`, an archive named `s3_smoke_20260508020000.tar.gz` is uploaded as `backups/s3_smoke_20260508020000.tar.gz`.
+With backup-level `object_key_prefix: backups`, an archive named `s3_smoke_20260508020000.tar.gz` is uploaded as `backups/s3_smoke_20260508020000.tar.gz`.
 
 ## Cloudflare R2 config
 
@@ -57,6 +58,12 @@ backups:
     type: folder
     source_path: ./data/smoke/source
     storage: [r2]
+    object_key_prefix: mysql
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
     scheduler:
       enabled: false
       cron_expr: ""
@@ -75,13 +82,12 @@ storage:
     secret_access_key: your-r2-secret-access-key
     endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
     force_path_style: true
-    object_key_prefix: mysql
     skip_bucket_validation: true
 ```
 
-R2 bucket folders are object key prefixes. With `object_key_prefix: mysql`, the archive appears in the bucket as `mysql/r2_backup_YYYYMMDDHHMMSS_NNNNNNNNN.tar.gz`.
+R2 bucket folders are object key prefixes. Put `object_key_prefix` on each backup job so one `r2` storage can be reused by multiple jobs. With `object_key_prefix: mysql`, the archive appears in the bucket as `mysql/r2_backup_YYYYMMDDHHMMSS_NNNNNNNNN.tar.gz`.
 
-Use `skip_bucket_validation: true` when an R2 bucket-scoped token can upload objects but returns `403 Forbidden` for `HeadBucket` during startup validation. The token still needs permission to upload objects to the bucket.
+Use `skip_bucket_validation: true` when an R2 bucket-scoped token can upload objects but returns `403 Forbidden` for `HeadBucket` during startup validation. The token still needs permission to upload objects to the bucket. If `remote_retention` is enabled, the token also needs list and delete permissions.
 
 Run the backup:
 
@@ -90,6 +96,34 @@ go run . --config config.r2.yaml
 ```
 
 If `object_key_prefix` is empty, the uploaded object key is only the generated archive filename.
+
+## Remote retention
+
+Remote retention is configured per backup job and applies to S3-compatible storage providers used by that job:
+
+```yaml
+backups:
+  - name: mysql_data
+    type: folder
+    source_path: ./data/mysql
+    storage: [r2]
+    object_key_prefix: mysql
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
+```
+
+Retention uses the timestamp in generated archive filenames, not S3 upload time. It only deletes objects matching the current backup name and prefix.
+
+Retention tiers:
+
+- Current month: keep newest `max_per_day` files for each day.
+- Previous months in the current year: keep newest `max_per_month` files for each month.
+- Previous years: keep newest `max_per_year` files for each year.
+
+A zero or omitted max value disables deletion for that tier.
 
 ## Local S3 with MinIO
 
@@ -204,4 +238,4 @@ For Cloudflare R2, if upload permissions are correct but startup fails with `Hea
 
 ### Upload succeeds but you cannot find the file
 
-Check the bucket configured by `bucket`. If `object_key_prefix` is empty, the object key is the generated archive filename. If `object_key_prefix` is set, check that prefix folder inside the bucket.
+Check the bucket configured by `bucket`. If backup-level `object_key_prefix` is empty, the object key is the generated archive filename. If `object_key_prefix` is set, check that prefix folder inside the bucket.

@@ -194,6 +194,35 @@ Then open the Google Drive folder and confirm one file with a name like this exi
 google_drive_smoke_YYYYMMDDHHMMSS_NNNNNNNNN.tar.gz
 ```
 
+## 9. Remote retention
+
+Google Drive supports the same `remote_retention` settings as S3-compatible storage. Configure it on the backup job:
+
+```yaml
+backups:
+  - name: google_drive_smoke
+    type: folder
+    source_path: ./data/smoke/source
+    storage: [google_drive]
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      max_per_month: 1
+      max_per_year: 1
+```
+
+Retention only applies inside the configured `folder_id`. The app lists non-trashed files in that folder, filters names matching the current backup archive pattern, and deletes old matching files by Google Drive file ID.
+
+Retention tiers:
+
+- Current month: keep newest `max_per_day` files for each day.
+- Previous months in the current year: keep newest `max_per_month` files for each month.
+- Previous years: keep newest `max_per_year` files for each year.
+
+A zero or omitted max value disables deletion for that tier.
+
+The selected Google Drive auth mode must be able to list files in the folder and delete matching backup files. For service-account mode, this depends on the service account's permissions in the Shared Drive or folder.
+
 ## Docker notes
 
 Mount the OAuth client secret and token file into the container. The token file must be on a persistent volume so it survives container restarts.

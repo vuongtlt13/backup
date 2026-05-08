@@ -15,9 +15,11 @@ type Config struct {
 
 // BackupConfig represents a single backup configuration
 type BackupConfig struct {
-	Name       string   `yaml:"name"`
-	SourcePath string   `yaml:"source_path"`
-	Storage    []string `yaml:"storage"`
+	Name            string                `yaml:"name"`
+	SourcePath      string                `yaml:"source_path"`
+	Storage         []string              `yaml:"storage"`
+	ObjectKeyPrefix string                `yaml:"object_key_prefix"`
+	RemoteRetention RemoteRetentionConfig `yaml:"remote_retention"`
 
 	// New fields for DB backup
 	Type string     `yaml:"type"` // folder, mysql, postgres
@@ -35,6 +37,14 @@ type BackupConfig struct {
 		Files   []string `yaml:"files"`   // e.g. ["*.log", "*.tmp", "temp.txt"]
 		Folders []string `yaml:"folders"` // e.g. ["node_modules", ".git", "temp"]
 	} `yaml:"ignore"`
+}
+
+// RemoteRetentionConfig holds remote storage retention settings
+type RemoteRetentionConfig struct {
+	Enabled     bool `yaml:"enabled"`
+	MaxPerDay   int  `yaml:"max_per_day"`
+	MaxPerMonth int  `yaml:"max_per_month"`
+	MaxPerYear  int  `yaml:"max_per_year"`
 }
 
 // SSHConfig holds SSH connection info

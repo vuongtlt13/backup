@@ -16,6 +16,14 @@ type StorageProvider interface {
 	GetName() string
 }
 
+type BackupFileSender interface {
+	SendBackupFile(filePath string, backup config.BackupConfig) error
+}
+
+type RemoteRetentionProvider interface {
+	CleanupRemoteBackups(backup config.BackupConfig) error
+}
+
 // StorageService manages multiple storage providers
 type StorageService struct {
 	providers map[string]StorageProvider
@@ -72,8 +80,8 @@ func NewStorageService(cfg *config.Config) *StorageService {
 }
 
 // SendToStorage sends a backup file to all specified storage providers
-func (s *StorageService) SendToStorage(filePath string, storageNames []string, backupName string) error {
-	s.log.Info("Storage", "[%s] Sending file to storage: %s", backupName, filePath)
+func (s *StorageService) SendToStorage(filePath string, backup config.BackupConfig) error {
+	s.log.Info("Storage", "[%s] Sending file to storage: %s", backup.Name, filePath)
 
 	// Verify file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -85,23 +93,28 @@ func (s *StorageService) SendToStorage(filePath string, storageNames []string, b
 	var lastError error
 
 	// Send to each specified storage provider
-	for _, name := range storageNames {
+	for _, name := range backup.Storage {
 		provider, err := s.GetProvider(name)
 		if err != nil {
-			s.log.Error("Storage", "[%s] Failed to get storage provider: %s", backupName, name)
+			s.log.Error("Storage", "[%s] Failed to get storage provider: %s", backup.Name, name)
 			lastError = err
 			continue
 		}
 
-		s.log.Info("Storage", "[%s] -> Sending file to provider: %s", backupName, name)
+		s.log.Info("Storage", "[%s] -> Sending file to provider: %s", backup.Name, name)
 
-		if err := provider.SendFile(filePath); err != nil {
-			s.log.Error("Storage", "[%s] Failed to send file to provider %s: %v", backupName, name, err)
+		if sender, ok := provider.(BackupFileSender); ok {
+			err = sender.SendBackupFile(filePath, backup)
+		} else {
+			err = provider.SendFile(filePath)
+		}
+		if err != nil {
+			s.log.Error("Storage", "[%s] Failed to send file to provider %s: %v", backup.Name, name, err)
 			lastError = err
 			continue
 		}
 
-		s.log.Info("Storage", "[%s] File sent successfully to provider: %s", backupName, name)
+		s.log.Info("Storage", "[%s] File sent successfully to provider: %s", backup.Name, name)
 		anySuccess = true
 	}
 
@@ -109,8 +122,36 @@ func (s *StorageService) SendToStorage(filePath string, storageNames []string, b
 		return fmt.Errorf("failed to send file to any storage provider: %v", lastError)
 	}
 
-	s.log.Info("Storage", "[%s] File sent successfully to at least one provider: %s", backupName, filePath)
+	s.log.Info("Storage", "[%s] File sent successfully to at least one provider: %s", backup.Name, filePath)
 	return nil
+}
+
+func (s *StorageService) CleanupRemoteRetention(backup config.BackupConfig) error {
+	if !backup.RemoteRetention.Enabled {
+		return nil
+	}
+
+	var lastError error
+	for _, name := range backup.Storage {
+		provider, err := s.GetProvider(name)
+		if err != nil {
+			lastError = err
+			continue
+		}
+
+		retentionProvider, ok := provider.(RemoteRetentionProvider)
+		if !ok {
+			s.log.Info("Storage", "[%s] Provider %s does not support remote retention", backup.Name, name)
+			continue
+		}
+
+		if err := retentionProvider.CleanupRemoteBackups(backup); err != nil {
+			s.log.Error("Storage", "[%s] Failed to clean up remote backups for provider %s: %v", backup.Name, name, err)
+			lastError = err
+		}
+	}
+
+	return lastError
 }
 
 // GetProvider returns a specific storage provider by name

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"testing"
+	"time"
 
 	"backupdb/config"
 
@@ -92,6 +93,90 @@ func TestS3ObjectKey(t *testing.T) {
 			assert.Equal(t, tt.expected, s3ObjectKey(tt.filePath, tt.prefix))
 		})
 	}
+}
+
+func TestEffectiveS3ObjectKeyPrefix(t *testing.T) {
+	storageCfg := config.StorageConfig{ObjectKeyPrefix: "storage-prefix"}
+
+	assert.Equal(t, "job-prefix", effectiveS3ObjectKeyPrefix(config.BackupConfig{ObjectKeyPrefix: "job-prefix"}, storageCfg))
+	assert.Equal(t, "storage-prefix", effectiveS3ObjectKeyPrefix(config.BackupConfig{}, storageCfg))
+	assert.Equal(t, "storage-prefix", effectiveS3ObjectKeyPrefix(config.BackupConfig{ObjectKeyPrefix: "/"}, storageCfg))
+}
+
+func TestS3ListPrefix(t *testing.T) {
+	assert.Equal(t, "", s3ListPrefix(""))
+	assert.Equal(t, "backups/", s3ListPrefix("backups"))
+	assert.Equal(t, "prod/mysql/", s3ListPrefix("/prod/mysql/"))
+}
+
+func TestParseS3BackupObject(t *testing.T) {
+	object, ok := parseS3BackupObject("mysql/mysql_data_20260508010203_123456789.tar.gz", "mysql", "mysql_data")
+	assert.True(t, ok)
+	assert.Equal(t, "mysql/mysql_data_20260508010203_123456789.tar.gz", object.Key)
+	assert.Equal(t, time.Date(2026, 5, 8, 1, 2, 3, 0, time.UTC), object.Timestamp)
+
+	object, ok = parseS3BackupObject("mysql/mysql_data_20260508010203.tar.gz", "mysql", "mysql_data")
+	assert.True(t, ok)
+	assert.Equal(t, "mysql/mysql_data_20260508010203.tar.gz", object.Key)
+
+	_, ok = parseS3BackupObject("postgres/mysql_data_20260508010203_123456789.tar.gz", "mysql", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseS3BackupObject("mysql/mysql_data_extra_20260508010203_123456789.tar.gz", "mysql", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseS3BackupObject("mysql/postgres_data_20260508010203_123456789.tar.gz", "mysql", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseS3BackupObject("mysql/mysql_data_20260508010203_123456789.zip", "mysql", "mysql_data")
+	assert.False(t, ok)
+
+	_, ok = parseS3BackupObject("mysql/nested/mysql_data_20260508010203_123456789.tar.gz", "mysql", "mysql_data")
+	assert.False(t, ok)
+}
+
+func TestSelectS3BackupsToDelete(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	objects := []s3BackupObject{
+		{Key: "mysql/mysql_data_20260508030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20250301000000_000000001.tar.gz", Timestamp: time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectS3BackupsToDelete(objects, config.RemoteRetentionConfig{
+		Enabled:     true,
+		MaxPerDay:   3,
+		MaxPerMonth: 1,
+		MaxPerYear:  1,
+	}, now)
+
+	assert.ElementsMatch(t, []s3BackupObject{
+		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}, toDelete)
+}
+
+func TestSelectS3BackupsToDeleteZeroMaxKeepsTier(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	objects := []s3BackupObject{
+		{Key: "mysql/mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectS3BackupsToDelete(objects, config.RemoteRetentionConfig{
+		Enabled:     true,
+		MaxPerDay:   0,
+		MaxPerMonth: 1,
+		MaxPerYear:  1,
+	}, now)
+
+	assert.Empty(t, toDelete)
 }
 
 func TestNewS3ProviderSkipsBucketValidation(t *testing.T) {
