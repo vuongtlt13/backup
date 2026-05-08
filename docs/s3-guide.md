@@ -1,6 +1,6 @@
 # S3 guide
 
-Use this guide to configure S3 storage and verify uploads with either AWS S3 or a local MinIO server.
+Use this guide to configure S3-compatible storage and verify uploads with AWS S3, Cloudflare R2, or a local MinIO server.
 
 ## AWS S3 config
 
@@ -8,7 +8,7 @@ Create or choose an S3 bucket and an IAM access key that can upload objects to t
 
 Minimum IAM actions for the configured bucket:
 
-- `s3:ListAllMyBuckets` for startup credential validation.
+- `s3:ListBucket` for startup bucket access validation.
 - `s3:PutObject` for uploads.
 
 Example:
@@ -36,6 +36,46 @@ storage:
     access_key_id: your-access-key-id
     secret_access_key: your-secret-access-key
 ```
+
+## Cloudflare R2 config
+
+Cloudflare R2 is S3-compatible. Use the S3 provider with the R2 endpoint and path-style addressing.
+
+Create an R2 bucket and an R2 API token, then configure:
+
+```yaml
+backups:
+  - name: r2_backup
+    type: folder
+    source_path: ./data/smoke/source
+    storage: [r2]
+    scheduler:
+      enabled: false
+      cron_expr: ""
+      max_backups: 3
+    ignore:
+      files: []
+      folders: []
+
+storage:
+  r2:
+    enabled: true
+    kind: s3
+    bucket: your-r2-bucket-name
+    region: auto
+    access_key_id: your-r2-access-key-id
+    secret_access_key: your-r2-secret-access-key
+    endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
+    force_path_style: true
+```
+
+Run the backup:
+
+```bash
+go run . --config config.r2.yaml
+```
+
+The uploaded object key is the generated archive filename.
 
 ## Local S3 with MinIO
 

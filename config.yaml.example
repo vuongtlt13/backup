@@ -122,6 +122,17 @@ storage:
     secret_access_key: minioadmin
     endpoint: http://localhost:9000
     force_path_style: true
+
+  # Cloudflare R2, see docs/s3-guide.md
+  r2:
+    enabled: false
+    kind: s3
+    bucket: your-r2-bucket-name
+    region: auto
+    access_key_id: your-r2-access-key-id
+    secret_access_key: your-r2-secret-access-key
+    endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
+    force_path_style: true
   rsync:
     enabled: false
     kind: rsync

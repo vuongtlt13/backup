@@ -2,3 +2,5 @@ mysql/*
 postgres/*
 mysql1/*
 postgres1/*
+/minio/
+/smoke/

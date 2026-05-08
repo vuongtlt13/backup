@@ -58,10 +58,12 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 	// Create S3 client
 	client := newS3Client(awsCfg, cfg)
 
-	// Validate credentials by trying to list buckets
-	_, err = client.ListBuckets(context.Background(), &s3.ListBucketsInput{})
+	// Validate credentials by checking access to the configured bucket
+	_, err = client.HeadBucket(context.Background(), &s3.HeadBucketInput{
+		Bucket: aws.String(cfg.Bucket),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate S3 credentials: %v", err)
+		return nil, fmt.Errorf("failed to validate S3 bucket access: %v", err)
 	}
 
 	return &S3Provider{
