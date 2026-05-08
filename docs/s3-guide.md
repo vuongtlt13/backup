@@ -11,6 +11,11 @@ Minimum IAM actions for the configured bucket:
 - `s3:ListBucket` for startup bucket access validation.
 - `s3:PutObject` for uploads.
 
+Optional fields:
+
+- `object_key_prefix`: stores archives under a folder-like prefix inside the bucket, such as `mysql` or `prod/mysql`.
+- `skip_bucket_validation`: skips startup bucket validation and checks permissions only when uploading.
+
 Example:
 
 ```yaml
@@ -35,7 +40,10 @@ storage:
     region: ap-southeast-1
     access_key_id: your-access-key-id
     secret_access_key: your-secret-access-key
+    object_key_prefix: backups
 ```
+
+With `object_key_prefix: backups`, an archive named `s3_smoke_20260508020000.tar.gz` is uploaded as `backups/s3_smoke_20260508020000.tar.gz`.
 
 ## Cloudflare R2 config
 
@@ -67,7 +75,13 @@ storage:
     secret_access_key: your-r2-secret-access-key
     endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
     force_path_style: true
+    object_key_prefix: mysql
+    skip_bucket_validation: true
 ```
+
+R2 bucket folders are object key prefixes. With `object_key_prefix: mysql`, the archive appears in the bucket as `mysql/r2_backup_YYYYMMDDHHMMSS_NNNNNNNNN.tar.gz`.
+
+Use `skip_bucket_validation: true` when an R2 bucket-scoped token can upload objects but returns `403 Forbidden` for `HeadBucket` during startup validation. The token still needs permission to upload objects to the bucket.
 
 Run the backup:
 
@@ -75,7 +89,7 @@ Run the backup:
 go run . --config config.r2.yaml
 ```
 
-The uploaded object key is the generated archive filename.
+If `object_key_prefix` is empty, the uploaded object key is only the generated archive filename.
 
 ## Local S3 with MinIO
 
@@ -186,6 +200,8 @@ Check that:
 - bucket name is `backup-smoke`,
 - access key and secret are both `minioadmin` for the local compose setup.
 
+For Cloudflare R2, if upload permissions are correct but startup fails with `HeadBucket` and `403 Forbidden`, set `skip_bucket_validation: true`.
+
 ### Upload succeeds but you cannot find the file
 
-Check the bucket configured by `bucket`. The object key is the generated archive filename.
+Check the bucket configured by `bucket`. If `object_key_prefix` is empty, the object key is the generated archive filename. If `object_key_prefix` is set, check that prefix folder inside the bucket.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -58,12 +59,13 @@ func NewS3Provider(cfg config.StorageConfig) (*S3Provider, error) {
 	// Create S3 client
 	client := newS3Client(awsCfg, cfg)
 
-	// Validate credentials by checking access to the configured bucket
-	_, err = client.HeadBucket(context.Background(), &s3.HeadBucketInput{
-		Bucket: aws.String(cfg.Bucket),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate S3 bucket access: %v", err)
+	if !cfg.SkipBucketValidation {
+		_, err = client.HeadBucket(context.Background(), &s3.HeadBucketInput{
+			Bucket: aws.String(cfg.Bucket),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate S3 bucket access: %v", err)
+		}
 	}
 
 	return &S3Provider{
@@ -80,6 +82,15 @@ func newS3Client(awsCfg aws.Config, cfg config.StorageConfig) *s3.Client {
 		}
 		options.UsePathStyle = cfg.ForcePathStyle
 	})
+}
+
+func s3ObjectKey(filePath, prefix string) string {
+	fileName := filepath.Base(filePath)
+	prefix = strings.Trim(prefix, "/")
+	if prefix == "" {
+		return fileName
+	}
+	return prefix + "/" + fileName
 }
 
 // SendFile implements StorageProvider interface
@@ -113,7 +124,7 @@ func (p *S3Provider) SendFile(filePath string) error {
 	// Upload file to S3
 	_, err = p.client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:        aws.String(p.config.Bucket),
-		Key:           aws.String(filepath.Base(filePath)),
+		Key:           aws.String(s3ObjectKey(filePath, p.config.ObjectKeyPrefix)),
 		Body:          file,
 		ContentLength: aws.Int64(fileInfo.Size()),
 	})

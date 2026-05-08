@@ -5,7 +5,7 @@ A robust backup service written in Go that supports multiple storage backends (S
 ## Features
 
 - Multiple storage backends support:
-  - Amazon S3 ([setup guide](docs/s3-guide.md))
+  - Amazon S3 and S3-compatible providers like Cloudflare R2 ([setup guide](docs/s3-guide.md))
   - Rsync ([setup guide](docs/rsync-guide.md))
   - Google Drive ([setup guide](docs/google-drive-guide.md))
 - Scheduled backups using cron expressions
@@ -83,8 +83,13 @@ Run the service with your config:
 go run . --config config.yaml
 ```
 
-Provider setup guides:
+If you back up MySQL/Postgres data folders with `type: folder` while the database is running, read the [raw database folder backup guide](docs/raw-db-folder-backup-guide.md) first. Running raw backups can be inconsistent unless you use database dumps or filesystem snapshots.
 
+For S3-compatible storage such as Cloudflare R2, use `object_key_prefix` to store archives under a folder-like path inside the bucket. If an R2 bucket-scoped token fails startup validation with `HeadBucket` and `403 Forbidden`, set `skip_bucket_validation: true` and let upload permissions be checked during `PutObject`.
+
+Provider and backup setup guides:
+
+- [Raw database folder backup guide](docs/raw-db-folder-backup-guide.md)
 - [S3 guide](docs/s3-guide.md)
 - [Rsync guide](docs/rsync-guide.md)
 - [Google Drive guide](docs/google-drive-guide.md)

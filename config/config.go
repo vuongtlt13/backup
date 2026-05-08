@@ -65,12 +65,14 @@ type StorageConfig struct {
 	Kind    string `yaml:"kind"` // s3, rsync, google_drive
 
 	// S3 specific fields
-	Bucket          string `yaml:"bucket"`
-	Region          string `yaml:"region"`
-	AccessKeyID     string `yaml:"access_key_id"`
-	SecretAccessKey string `yaml:"secret_access_key"`
-	Endpoint        string `yaml:"endpoint"`
-	ForcePathStyle  bool   `yaml:"force_path_style"`
+	Bucket               string `yaml:"bucket"`
+	Region               string `yaml:"region"`
+	AccessKeyID          string `yaml:"access_key_id"`
+	SecretAccessKey      string `yaml:"secret_access_key"`
+	Endpoint             string `yaml:"endpoint"`
+	ForcePathStyle       bool   `yaml:"force_path_style"`
+	ObjectKeyPrefix      string `yaml:"object_key_prefix"`
+	SkipBucketValidation bool   `yaml:"skip_bucket_validation"`
 
 	// Google Drive specific fields
 	AuthMode         string `yaml:"auth_mode"`

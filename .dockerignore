@@ -1,1 +1,8 @@
 config.yaml
+.idea
+backups
+/*.json
+/config.google-drive-smoke.yaml
+/tmp/
+/config.s3-smoke.yaml
+/config.r2.example.yaml

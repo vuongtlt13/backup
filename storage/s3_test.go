@@ -55,6 +55,61 @@ func TestNewS3ClientOptions(t *testing.T) {
 	assert.True(t, options.UsePathStyle)
 }
 
+func TestS3ObjectKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		filePath string
+		prefix   string
+		expected string
+	}{
+		{
+			name:     "no prefix",
+			filePath: "/backups/mysql_data_20260508.tar.gz",
+			expected: "mysql_data_20260508.tar.gz",
+		},
+		{
+			name:     "simple prefix",
+			filePath: "/backups/mysql_data_20260508.tar.gz",
+			prefix:   "mysql",
+			expected: "mysql/mysql_data_20260508.tar.gz",
+		},
+		{
+			name:     "trimmed prefix",
+			filePath: "/backups/mysql_data_20260508.tar.gz",
+			prefix:   "/prod/mysql/",
+			expected: "prod/mysql/mysql_data_20260508.tar.gz",
+		},
+		{
+			name:     "nested prefix",
+			filePath: "/backups/postgres_data_20260508.tar.gz",
+			prefix:   "prod/postgres",
+			expected: "prod/postgres/postgres_data_20260508.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, s3ObjectKey(tt.filePath, tt.prefix))
+		})
+	}
+}
+
+func TestNewS3ProviderSkipsBucketValidation(t *testing.T) {
+	cfg := config.StorageConfig{
+		Enabled:              true,
+		Kind:                 "s3",
+		Bucket:               "test-bucket",
+		Region:               "us-west-2",
+		AccessKeyID:          "test-key",
+		SecretAccessKey:      "test-secret",
+		SkipBucketValidation: true,
+	}
+
+	provider, err := NewS3Provider(cfg)
+	assert.NoError(t, err)
+	assert.NotNil(t, provider)
+}
+
 func TestS3ProviderSendFile(t *testing.T) {
 	cfg := config.StorageConfig{
 		Enabled:         true,

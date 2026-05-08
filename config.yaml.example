@@ -1,26 +1,29 @@
 backups:
-  # Database backups
+  # Raw database folder backups while DB stays running.
+  # See docs/raw-db-folder-backup-guide.md before using this in production.
   - name: "mysql_data"
+    type: folder
     source_path: "./data/mysql"
-    storage: ["rsync"]
+    storage: ["r2"]
     scheduler:
       enabled: true
-      cron_expr: "* * * * *"  # Run at 2 AM daily
-      max_backups: 7
+      cron_expr: "0 2 * * *"
+      max_backups: 3
     ignore:
-      files: ["*.log", "*.tmp", "mysql.sock"]
-      folders: ["temp", "cache"]
+      files: ["*.tmp", "*.pid", "*.sock", "mysql.sock"]
+      folders: ["#innodb_temp", "tmp"]
 
   - name: "postgres_data"
+    type: folder
     source_path: "./data/postgres"
-    storage: ["google_drive", "s3"]
+    storage: ["r2"]
     scheduler:
       enabled: true
-      cron_expr: "* * * * *"  # Run at 3 AM on Monday, Wednesday, and Friday
-      max_backups: 7
+      cron_expr: "30 2 * * *"
+      max_backups: 3
     ignore:
-      files: ["*.log", "*.tmp", "postmaster.pid"]
-      folders: ["pg_wal", "pg_stat"]
+      files: ["*.pid", "*.tmp", "postmaster.pid", "postmaster.opts"]
+      folders: ["pg_stat_tmp"]
 
   # Example: Backup folder
   - name: myfolder_backup
@@ -133,6 +136,8 @@ storage:
     secret_access_key: your-r2-secret-access-key
     endpoint: https://your-cloudflare-account-id.r2.cloudflarestorage.com
     force_path_style: true
+    object_key_prefix: backups
+    skip_bucket_validation: true
   rsync:
     enabled: false
     kind: rsync
