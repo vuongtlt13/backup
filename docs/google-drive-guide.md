@@ -207,19 +207,32 @@ backups:
     remote_retention:
       enabled: true
       max_per_day: 3
+      period_days: 3
+      max_per_period: 1
       max_per_month: 1
       max_per_year: 1
 ```
 
-Retention only applies inside the configured `folder_id`. The app lists non-trashed files in that folder, filters names matching the current backup archive pattern, and deletes old matching files by Google Drive file ID.
+Retention only applies inside the configured `folder_id`. Remote retention runs after a successful upload. The app lists non-trashed files in that folder, filters names matching the current backup archive pattern, sorts them from newest to oldest by filename timestamp, and deletes old matching files by Google Drive file ID.
 
 Retention tiers:
 
-- Current month: keep newest `max_per_day` files for each day.
-- Previous months in the current year: keep newest `max_per_month` files for each month.
-- Previous years: keep newest `max_per_year` files for each year.
+- Latest backup day: keep newest `max_per_day` files from the newest day found in remote storage.
+- Older backups in the same month as the latest backup: if `period_days` is set, group them into `period_days` windows and keep newest `max_per_period` files per window.
+- Older months in the latest backup year: keep newest `max_per_month` files for each month.
+- Older years: keep newest `max_per_year` files for each year.
 
-A zero or omitted max value disables deletion for that tier.
+Example with `max_per_day: 3`, `period_days: 3`, `max_per_period: 1`, `max_per_month: 1`, and `max_per_year: 1`:
+
+```text
+2026-05-08: keep 3 newest backups because this is the latest backup day
+2026-05-07 to 2026-05-05: keep 1 newest backup for this 3-day window
+2026-05-04 to 2026-05-02: keep 1 newest backup for this 3-day window
+2026-04: keep 1 newest backup
+2025:    keep 1 newest backup
+```
+
+If `period_days` or `max_per_period` is zero or omitted, older backups in the latest month use the monthly tier instead. A zero or omitted max value disables deletion for that tier.
 
 The selected Google Drive auth mode must be able to list files in the folder and delete matching backup files. For service-account mode, this depends on the service account's permissions in the Shared Drive or folder.
 

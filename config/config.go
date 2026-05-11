@@ -41,10 +41,12 @@ type BackupConfig struct {
 
 // RemoteRetentionConfig holds remote storage retention settings
 type RemoteRetentionConfig struct {
-	Enabled     bool `yaml:"enabled"`
-	MaxPerDay   int  `yaml:"max_per_day"`
-	MaxPerMonth int  `yaml:"max_per_month"`
-	MaxPerYear  int  `yaml:"max_per_year"`
+	Enabled      bool `yaml:"enabled"`
+	MaxPerDay    int  `yaml:"max_per_day"`
+	PeriodDays   int  `yaml:"period_days"`
+	MaxPerPeriod int  `yaml:"max_per_period"`
+	MaxPerMonth  int  `yaml:"max_per_month"`
+	MaxPerYear   int  `yaml:"max_per_year"`
 }
 
 // SSHConfig holds SSH connection info

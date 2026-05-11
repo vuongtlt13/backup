@@ -160,17 +160,25 @@ func selectS3BackupsToDelete(objects []s3BackupObject, retention config.RemoteRe
 	})
 
 	keep := make(map[string]bool)
-	currentYear, currentMonth, _ := now.Date()
+	latestDay := objects[0].Timestamp.Format("2006-01-02")
+	latestYear, latestMonth, latestMonthDay := objects[0].Timestamp.Date()
+	latestDate := time.Date(latestYear, latestMonth, latestMonthDay, 0, 0, 0, 0, objects[0].Timestamp.Location())
 	daily := make(map[string][]s3BackupObject)
+	periodic := make(map[string][]s3BackupObject)
 	monthly := make(map[string][]s3BackupObject)
 	yearly := make(map[string][]s3BackupObject)
 
 	for _, object := range objects {
-		year, month, _ := object.Timestamp.Date()
+		year, month, day := object.Timestamp.Date()
 		switch {
-		case year == currentYear && month == currentMonth:
-			daily[object.Timestamp.Format("2006-01-02")] = append(daily[object.Timestamp.Format("2006-01-02")], object)
-		case year == currentYear:
+		case object.Timestamp.Format("2006-01-02") == latestDay:
+			daily[latestDay] = append(daily[latestDay], object)
+		case retention.PeriodDays > 0 && retention.MaxPerPeriod > 0 && year == latestYear && month == latestMonth:
+			objectDate := time.Date(year, month, day, 0, 0, 0, 0, object.Timestamp.Location())
+			periodKey := int(latestDate.Sub(objectDate).Hours()/24-1) / retention.PeriodDays
+			periodGroup := fmt.Sprintf("%04d-%02d-%d", year, month, periodKey)
+			periodic[periodGroup] = append(periodic[periodGroup], object)
+		case year == latestYear:
 			monthly[object.Timestamp.Format("2006-01")] = append(monthly[object.Timestamp.Format("2006-01")], object)
 		default:
 			yearly[object.Timestamp.Format("2006")] = append(yearly[object.Timestamp.Format("2006")], object)
@@ -178,6 +186,7 @@ func selectS3BackupsToDelete(objects []s3BackupObject, retention config.RemoteRe
 	}
 
 	markS3BackupsToKeep(daily, retention.MaxPerDay, keep)
+	markS3BackupsToKeep(periodic, retention.MaxPerPeriod, keep)
 	markS3BackupsToKeep(monthly, retention.MaxPerMonth, keep)
 	markS3BackupsToKeep(yearly, retention.MaxPerYear, keep)
 

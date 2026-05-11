@@ -199,6 +199,9 @@ func TestSelectGoogleDriveBackupsToDelete(t *testing.T) {
 		{ID: "day-2", Name: "mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
 		{ID: "day-1", Name: "mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
 		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "previous-day-new", Name: "mysql_data_20260507030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 3, 0, 0, 0, time.UTC)},
+		{ID: "previous-day-old", Name: "mysql_data_20260507020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 2, 0, 0, 0, time.UTC)},
+		{ID: "two-days-old", Name: "mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
 		{ID: "month-new", Name: "mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
 		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 		{ID: "year-new", Name: "mysql_data_20250301000000_000000001.tar.gz", Timestamp: time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)},
@@ -214,8 +217,44 @@ func TestSelectGoogleDriveBackupsToDelete(t *testing.T) {
 
 	assert.ElementsMatch(t, []googleDriveBackupFile{
 		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "previous-day-old", Name: "mysql_data_20260507020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 2, 0, 0, 0, time.UTC)},
+		{ID: "two-days-old", Name: "mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
 		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 		{ID: "year-old", Name: "mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}, toDelete)
+}
+
+func TestSelectGoogleDriveBackupsToDeletePeriodTier(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	files := []googleDriveBackupFile{
+		{ID: "day-3", Name: "mysql_data_20260508030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 3, 0, 0, 0, time.UTC)},
+		{ID: "day-2", Name: "mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{ID: "day-1", Name: "mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "period-0-new", Name: "mysql_data_20260507030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-0-mid", Name: "mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-0-old", Name: "mysql_data_20260505030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 5, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-1-new", Name: "mysql_data_20260504030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 4, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-1-old", Name: "mysql_data_20260503030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 3, 3, 0, 0, 0, time.UTC)},
+		{ID: "month-new", Name: "mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
+		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectGoogleDriveBackupsToDelete(files, config.RemoteRetentionConfig{
+		Enabled:      true,
+		MaxPerDay:    3,
+		PeriodDays:   3,
+		MaxPerPeriod: 1,
+		MaxPerMonth:  1,
+		MaxPerYear:   1,
+	}, now)
+
+	assert.ElementsMatch(t, []googleDriveBackupFile{
+		{ID: "day-0", Name: "mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{ID: "period-0-mid", Name: "mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-0-old", Name: "mysql_data_20260505030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 5, 3, 0, 0, 0, time.UTC)},
+		{ID: "period-1-old", Name: "mysql_data_20260503030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 3, 3, 0, 0, 0, time.UTC)},
+		{ID: "month-old", Name: "mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 	}, toDelete)
 }
 

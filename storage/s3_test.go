@@ -142,6 +142,9 @@ func TestSelectS3BackupsToDelete(t *testing.T) {
 		{Key: "mysql/mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260507030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260507020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 2, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20250301000000_000000001.tar.gz", Timestamp: time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)},
@@ -157,8 +160,44 @@ func TestSelectS3BackupsToDelete(t *testing.T) {
 
 	assert.ElementsMatch(t, []s3BackupObject{
 		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260507020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 2, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 		{Key: "mysql/mysql_data_20250201000000_000000001.tar.gz", Timestamp: time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}, toDelete)
+}
+
+func TestSelectS3BackupsToDeletePeriodTier(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	objects := []s3BackupObject{
+		{Key: "mysql/mysql_data_20260508030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508020000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 2, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508010000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 1, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260507030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 7, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260505030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 5, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260504030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 4, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260503030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 3, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260402000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
+	}
+
+	toDelete := selectS3BackupsToDelete(objects, config.RemoteRetentionConfig{
+		Enabled:      true,
+		MaxPerDay:    3,
+		PeriodDays:   3,
+		MaxPerPeriod: 1,
+		MaxPerMonth:  1,
+		MaxPerYear:   1,
+	}, now)
+
+	assert.ElementsMatch(t, []s3BackupObject{
+		{Key: "mysql/mysql_data_20260508000000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260506030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 6, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260505030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 5, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260503030000_000000001.tar.gz", Timestamp: time.Date(2026, 5, 3, 3, 0, 0, 0, time.UTC)},
+		{Key: "mysql/mysql_data_20260401000000_000000001.tar.gz", Timestamp: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)},
 	}, toDelete)
 }
 

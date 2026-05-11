@@ -220,18 +220,25 @@ func selectGoogleDriveBackupsToDelete(files []googleDriveBackupFile, retention c
 	})
 
 	keep := make(map[string]bool)
-	currentYear, currentMonth, _ := now.Date()
+	latestDay := files[0].Timestamp.Format("2006-01-02")
+	latestYear, latestMonth, latestMonthDay := files[0].Timestamp.Date()
+	latestDate := time.Date(latestYear, latestMonth, latestMonthDay, 0, 0, 0, 0, files[0].Timestamp.Location())
 	daily := make(map[string][]googleDriveBackupFile)
+	periodic := make(map[string][]googleDriveBackupFile)
 	monthly := make(map[string][]googleDriveBackupFile)
 	yearly := make(map[string][]googleDriveBackupFile)
 
 	for _, file := range files {
-		year, month, _ := file.Timestamp.Date()
+		year, month, day := file.Timestamp.Date()
 		switch {
-		case year == currentYear && month == currentMonth:
-			dayKey := file.Timestamp.Format("2006-01-02")
-			daily[dayKey] = append(daily[dayKey], file)
-		case year == currentYear:
+		case file.Timestamp.Format("2006-01-02") == latestDay:
+			daily[latestDay] = append(daily[latestDay], file)
+		case retention.PeriodDays > 0 && retention.MaxPerPeriod > 0 && year == latestYear && month == latestMonth:
+			fileDate := time.Date(year, month, day, 0, 0, 0, 0, file.Timestamp.Location())
+			periodKey := int(latestDate.Sub(fileDate).Hours()/24-1) / retention.PeriodDays
+			periodGroup := fmt.Sprintf("%04d-%02d-%d", year, month, periodKey)
+			periodic[periodGroup] = append(periodic[periodGroup], file)
+		case year == latestYear:
 			monthKey := file.Timestamp.Format("2006-01")
 			monthly[monthKey] = append(monthly[monthKey], file)
 		default:
@@ -241,6 +248,7 @@ func selectGoogleDriveBackupsToDelete(files []googleDriveBackupFile, retention c
 	}
 
 	markGoogleDriveBackupsToKeep(daily, retention.MaxPerDay, keep)
+	markGoogleDriveBackupsToKeep(periodic, retention.MaxPerPeriod, keep)
 	markGoogleDriveBackupsToKeep(monthly, retention.MaxPerMonth, keep)
 	markGoogleDriveBackupsToKeep(yearly, retention.MaxPerYear, keep)
 

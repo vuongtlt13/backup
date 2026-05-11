@@ -9,6 +9,8 @@ backups:
     remote_retention:
       enabled: true
       max_per_day: 3
+      period_days: 3
+      max_per_period: 1
       max_per_month: 1
       max_per_year: 1
     scheduler:
@@ -27,6 +29,8 @@ backups:
     remote_retention:
       enabled: true
       max_per_day: 3
+      period_days: 3
+      max_per_period: 1
       max_per_month: 1
       max_per_year: 1
     scheduler:
@@ -45,6 +49,8 @@ backups:
     remote_retention:
       enabled: true
       max_per_day: 3
+      period_days: 3
+      max_per_period: 1
       max_per_month: 1
       max_per_year: 1
     scheduler:

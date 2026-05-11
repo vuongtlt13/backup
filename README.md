@@ -87,6 +87,36 @@ If you back up MySQL/Postgres data folders with `type: folder` while the databas
 
 For S3-compatible storage such as Cloudflare R2, use `object_key_prefix` to store archives under a folder-like path inside the bucket. If an R2 bucket-scoped token fails startup validation with `HeadBucket` and `403 Forbidden`, set `skip_bucket_validation: true` and let upload permissions be checked during `PutObject`.
 
+### Remote retention
+
+Remote retention is configured per backup job for S3-compatible and Google Drive storage. It runs after a successful upload, lists existing remote archives for the same backup name and location, sorts them by the timestamp in the generated archive filename, and deletes older matching archives.
+
+```yaml
+backups:
+  - name: mysql_data
+    type: folder
+    source_path: ./data/mysql
+    storage: [r2]
+    object_key_prefix: mysql
+    remote_retention:
+      enabled: true
+      max_per_day: 3
+      period_days: 3
+      max_per_period: 1
+      max_per_month: 1
+      max_per_year: 1
+```
+
+Retention rules:
+
+- Latest backup day: keep newest `max_per_day` archives from the newest day found remotely.
+- Older backups in the same month as the latest backup: if `period_days` is set, group them into `period_days` windows and keep newest `max_per_period` archives per window.
+- Older months in the latest backup year: keep newest `max_per_month` archives for each month.
+- Older years: keep newest `max_per_year` archives for each year.
+- A zero or omitted max value disables deletion for that tier.
+
+With the example above, the latest backup day keeps 3 archives, older days in the same month keep 1 archive per 3-day window, each older month keeps 1 archive, and each older year keeps 1 archive.
+
 Provider and backup setup guides:
 
 - [Raw database folder backup guide](docs/raw-db-folder-backup-guide.md)
